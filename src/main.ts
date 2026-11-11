@@ -52,6 +52,14 @@ export default class FlipViewPlugin extends Plugin {
           delete s.highlights[oldPath];
         }
         for (const id of Object.keys(s.noteOrder)) s.noteOrder[id] = s.noteOrder[id].map((k) => (k === oldPath ? file.path : k));
+        for (const key of ["annotations", "readState"] as const) {
+          const map = s[key] as Record<string, unknown>;
+          if (map[oldPath]) {
+            map[file.path] = map[oldPath];
+            delete map[oldPath];
+          }
+        }
+        for (const list of Object.values(s.bookmarks)) list.forEach((b) => b.path === oldPath && (b.path = file.path));
         this.saveQuietly();
       }),
     );
@@ -70,10 +78,11 @@ export default class FlipViewPlugin extends Plugin {
     const base = freshSettings();
     this.settings = { ...base, ...saved };
     // make sure nested containers always exist, even for data saved by older versions
-    for (const k of ["coverSeeds", "noteOrder", "separators", "notebookNames", "coverOverrides", "highlights"] as const) {
+    for (const k of ["coverSeeds", "noteOrder", "separators", "notebookNames", "coverOverrides", "highlights", "annotations", "readState", "bookmarks", "writeColors"] as const) {
       (this.settings as unknown as Record<string, unknown>)[k] = { ...(base[k] as object), ...((saved?.[k] as object | undefined) ?? {}) };
     }
     if (!Array.isArray(this.settings.highlighters)) this.settings.highlighters = base.highlighters;
+    if ((saved as Record<string, unknown> | null)?.coverBand === false && !saved?.bandStyle) this.settings.bandStyle = "none";
     // Homemade Apple was replaced by Alex Brush
     const legacy = "homemade-apple" as string;
     if ((this.settings.handFont as string) === legacy) this.settings.handFont = "alex-brush";

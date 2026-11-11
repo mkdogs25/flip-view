@@ -12,6 +12,14 @@ in 3D; turn pages to read your notes either as **handwriting** or as **formatted
 - **Handwritten / Text toggle.** Text view renders through Obsidian itself, so your note font, theme and plugins' post-processing apply.
   Handwriting view re-sets the same note in a handwriting font with per-word jitter. Messiness, font, size, ink colour and paper (plain, lined, grid, dotted) are configurable. It is seeded per note, so a note always looks the same.
 - **Generated covers.** Every notebook gets a random cover (cosmic, leather, linen, marble or geometric) painted on a canvas from seeded noise: no AI. Use the dice button to reroll one, or fix a style in settings.
+- **Shelf mode:** see every notebook as a spine on a wall shelf (wall and shelf colours follow light/dark). Click one and it slides out, swings round to show its cover, and lies down on the desk. Spine designs, covers and progress show on the spines.
+- **Index page** at the front of every notebook: clickable note titles, page numbers, sections, last-edited (and created) dates, read status and bookmark stars. Choose what it shows in settings.
+- **Reading progress:** tracks which notes you've opened, a recently read list, bookmarks and a ribbon, and a progress ring/bar/count on each notebook (list, cover, shelf). All optional and configurable; stored in plugin data, never in your notes.
+- **Write in the book** (handwritten view): pen, pencil and marker for freehand ink, a text tool for typed handwriting, and an eraser. Stored in plugin data, not in your notes.
+- **Highlights:** double-click one to recolour it, add a margin note, or remove it.
+- **Margin notes and realistic pages:** `> [!margin] text` callouts and highlight notes appear in the outer margin; page layouts have a wider gutter, running heads and outer page numbers; handwriting has slightly uneven line spacing (words stay on the line on ruled paper).
+- **More ways to customise the physical book:** 17 cover materials, cover colour, spine designs, elastic straps (vertical, horizontal, cross), ribbon colour, paper colours, page textures, per-notebook overrides. None of it touches your notes.
+- **20 handwriting fonts** including several cursive scripts.
 - **Outline panel** on the right: reorder notes by dragging, add **separator pages** between notes, jump to headings and highlights.
 - **Handwriting extras:** cursive fonts, small-caps handwritten headings (configurable), maths and code written out by hand, and on ruled/grid/dotted paper words sit on the line.
 - **Highlighters** on the desk (any number, any colour) with a draggable sticky-note **legend**. Highlights are saved per note.

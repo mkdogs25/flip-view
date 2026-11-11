@@ -17,7 +17,7 @@ function parseList(raw: string): string[] {
 }
 
 function toRef(file: TFile): NoteRef {
-  return { path: file.path, title: file.basename, mtime: file.stat.mtime, ctime: file.stat.ctime };
+  return { path: file.path, title: file.basename, mtime: file.stat.mtime, ctime: file.stat.ctime, size: file.stat.size };
 }
 
 /** Turns a raw frontmatter value (string, list, wikilink, number…) into clean group names. */
@@ -86,6 +86,10 @@ export function finishNotebook(nb: Notebook, s: FlipViewSettings): void {
   nb.notes.forEach((n) => take(n.path));
   Object.keys(seps).forEach((id) => take("sep:" + id));
   nb.notes = out;
+  // the index page always comes first
+  if (s.indexEnabled && out.some((n) => n.kind !== "separator")) {
+    nb.notes.unshift({ path: "index:" + nb.id, title: s.indexTitle.trim() || "Contents", mtime: 0, ctime: 0, kind: "index" });
+  }
 }
 
 function sortNotebooks(list: Notebook[], mode: FlipViewSettings["notebookSort"]): void {

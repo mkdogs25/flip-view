@@ -19,6 +19,13 @@ if (q.get("color")) settings.coverColor = "#" + q.get("color");
 if (q.get("label")) settings.coverLabel = q.get("label") as FlipViewSettings["coverLabel"];
 if (q.get("sound") === "0") settings.soundEnabled = false;
 if (q.get("flip")) settings.flipMode = q.get("flip") as FlipViewSettings["flipMode"];
+if (q.get("shelf")) settings.shelfMode = true;
+if (q.get("pcolor")) settings.paperColor = q.get("pcolor") as FlipViewSettings["paperColor"];
+if (q.get("tex")) settings.pageTexture = q.get("tex") as FlipViewSettings["pageTexture"];
+if (q.get("layout")) settings.pageLayout = q.get("layout") as FlipViewSettings["pageLayout"];
+if (q.get("spine")) settings.spineStyle = q.get("spine") as FlipViewSettings["spineStyle"];
+if (q.get("band")) settings.bandStyle = q.get("band") as FlipViewSettings["bandStyle"];
+if (q.get("margins") === "0") settings.marginNotes = false;
 if (q.get("anim")) settings.animation = q.get("anim") as FlipViewSettings["animation"];
 
 const galaxy = `data:image/svg+xml;utf8,${encodeURIComponent(
@@ -58,6 +65,8 @@ def energy(m, c=3e8):
 
 > Probability is not certain!
 
+> [!margin] This is the key idea of the whole chapter!
+
 See also [Thermodynamics](Thermodynamics), the [Garden Plan](<Garden Plan>) in another notebook, [time dilation](<Relativity#Time Dilation>) and an [external page](https://example.com/lesson).
 
 ---
@@ -96,7 +105,7 @@ Perhaps the answer lies not in more energy, but in a deeper understanding of it.
 function nb(id: string, name: string, folder: string): Notebook {
   const notes: NoteRef[] = Object.keys(SOURCES)
     .filter((k) => k.startsWith(folder + "/"))
-    .map((k, i) => ({ path: k + ".md", title: k.split("/")[1], mtime: new Date(2026, 10, 8 - i).getTime(), ctime: 0 }));
+    .map((k, i) => ({ path: k + ".md", title: k.split("/")[1], mtime: new Date(2026, 10, 8 - i).getTime(), ctime: new Date(2026, 9, 1 + i).getTime(), size: SOURCES[k].length }));
   return { id, name, originalName: name, notes };
 }
 
@@ -142,6 +151,19 @@ const host: NotebookHost = {
       }
     });
     restoreMath(el, x.items);
+    // marked doesn't know Obsidian callouts: turn "> [!margin] text" into the structure Obsidian renders
+    el.querySelectorAll("blockquote").forEach((bq) => {
+      const m = /^\s*\[!(\w+)\]\s*([\s\S]*)$/.exec(bq.textContent ?? "");
+      if (!m) return;
+      const c = document.createElement("div");
+      c.className = "callout";
+      c.setAttribute("data-callout", m[1].toLowerCase());
+      const body = document.createElement("div");
+      body.className = "callout-content";
+      body.textContent = m[2].trim();
+      c.appendChild(body);
+      bq.replaceWith(c);
+    });
     return () => undefined;
   },
   promptText: async (o) => (o.value ? o.value + " (renamed)" : "New Chapter"),
@@ -160,6 +182,12 @@ const host: NotebookHost = {
   isDarkTheme: () => q.get("obsidian") === "dark",
 };
 
+if (q.get("progress")) {
+  const now = Date.now();
+  settings.readState["Physics/Quantum Mechanics.md"] = { opened: now - 86400000, last: now - 3600000, visits: 3, maxSpread: 2, spreads: 3, finished: true };
+  settings.readState["Physics/Thermodynamics.md"] = { opened: now - 7200000, last: now - 600000, visits: 1, maxSpread: 0, spreads: 2, finished: false };
+  settings.bookmarks["folder:Physics"] = [{ path: "Physics/Thermodynamics.md", spread: 0, at: now }];
+}
 injectFonts();
 const app = new NotebookApp(document.getElementById("host") as HTMLElement, host);
 app.setNotebooks(host.getNotebooks());

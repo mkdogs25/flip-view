@@ -53,6 +53,12 @@ P.setAttr = function (k: string, v: string) {
   return d;
 };
 
+(window as any).createSpan = (o?: Info) => {
+  const d = document.createElement("span");
+  apply(d, o);
+  return d;
+};
+
 const ICON_PATHS: Record<string, string> = {
   library: "M4 3v18M9 3v18M14 5l5 15",
   search: "M11 4a7 7 0 100 14 7 7 0 000-14zM21 21l-5-5",
@@ -79,6 +85,9 @@ const ICON_PATHS: Record<string, string> = {
   "chevron-down": "M5 9l7 7 7-7",
   "refresh-cw": "M20 11a8 8 0 10-2.3 6M20 4v7h-7",
   "external-link": "M14 4h6v6M20 4l-9 9M18 14v6H4V6h6",
+  "library-big": "M5 3h4v18H5zM11 3h4v18h-4zM17 5l3 1-4 15-3-1z",
+  "notebook-text": "M6 3h12v18H6zM9 8h6M9 12h6",
+  list: "M8 6h13M8 12h13M8 18h13M3 6h.1M3 12h.1M3 18h.1",
   clock: "M12 3a9 9 0 100 18 9 9 0 000-18zM12 7v5l3 2",
 };
 

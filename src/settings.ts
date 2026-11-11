@@ -1,8 +1,8 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import type FlipViewPlugin from "./main";
 import { HAND_FONTS } from "./render/fonts";
-import { COVER_STYLE_OPTIONS } from "./modals";
-import { CoverLabel, CoverStyle, FlipViewSettings, HandFont, PaperStyle, TextCase } from "./types";
+import { BAND_OPTIONS, COVER_STYLE_OPTIONS, PAPER_OPTIONS, SPINE_OPTIONS } from "./modals";
+import { BandStyle, CoverLabel, CoverStyle, FlipViewSettings, HandFont, PageLayout, PageTexture, PaperColor, PaperStyle, SpineStyle, TextCase } from "./types";
 
 export class FlipViewSettingTab extends PluginSettingTab {
   constructor(app: App, private plugin: FlipViewPlugin) {
@@ -137,9 +137,66 @@ export class FlipViewSettingTab extends PluginSettingTab {
           .onChange((v) => ((s.coverLabel = v as CoverLabel), save())),
       );
     new Setting(containerEl)
-      .setName("Elastic band")
-      .setDesc("The strap on the right of the cover.")
-      .addToggle((t) => t.setValue(s.coverBand).onChange((v) => ((s.coverBand = v), save())));
+      .setName("Elastic strap")
+      .setDesc("The strap that holds the notebook shut.")
+      .addDropdown((d) => {
+        BAND_OPTIONS.forEach(([v, l]) => d.addOption(v, l));
+        d.setValue(s.bandStyle).onChange((v) => ((s.bandStyle = v as BandStyle), save()));
+      })
+      .addColorPicker((c) => c.setValue(s.bandColor || "#3a2f4d").onChange((v) => ((s.bandColor = v), save())))
+      .addExtraButton((b) => b.setIcon("rotate-ccw").setTooltip("Match the cover").onClick(() => ((s.bandColor = ""), save(), this.display())));
+    new Setting(containerEl)
+      .setName("Spine design")
+      .setDesc("How spines look on the shelf, and the trim on the cover's hinge.")
+      .addDropdown((d) => {
+        SPINE_OPTIONS.forEach(([v, l]) => d.addOption(v, l));
+        d.setValue(s.spineStyle).onChange((v) => ((s.spineStyle = v as SpineStyle), save()));
+      });
+    new Setting(containerEl)
+      .setName("Ribbon bookmark")
+      .setDesc("A ribbon hangs from the book. Click it to jump between your bookmarks.")
+      .addToggle((t) => t.setValue(s.ribbon).onChange((v) => ((s.ribbon = v), save())))
+      .addColorPicker((c) => c.setValue(s.ribbonColor).onChange((v) => ((s.ribbonColor = v), save())));
+    new Setting(containerEl)
+      .setName("Paper colour")
+      .setDesc("Per-notebook paper can be set from the palette button on a notebook's cover.")
+      .addDropdown((d) => {
+        PAPER_OPTIONS.forEach(([v, l]) => d.addOption(v, l));
+        d.setValue(s.paperColor).onChange((v) => ((s.paperColor = v as PaperColor), save()));
+      })
+      .addColorPicker((c) => c.setValue(s.paperCustom).onChange((v) => ((s.paperCustom = v), (s.paperColor = "custom"), save())));
+    new Setting(containerEl)
+      .setName("Page texture")
+      .addDropdown((d) =>
+        d
+          .addOption("fine", "Fine grain")
+          .addOption("none", "Smooth")
+          .addOption("rough", "Rough")
+          .addOption("laid", "Laid lines")
+          .addOption("linen", "Linen weave")
+          .addOption("speckled", "Recycled flecks")
+          .setValue(s.pageTexture)
+          .onChange((v) => ((s.pageTexture = v as PageTexture), save())),
+      );
+    new Setting(containerEl)
+      .setName("Page layout")
+      .setDesc("Realistic has a wider gutter margin, running heads and outer page numbers.")
+      .addDropdown((d) =>
+        d
+          .addOption("realistic", "Realistic book")
+          .addOption("classic", "Classic (even margins)")
+          .addOption("wide", "Wide outer margin")
+          .setValue(s.pageLayout)
+          .onChange((v) => ((s.pageLayout = v as PageLayout), save())),
+      );
+    new Setting(containerEl)
+      .setName("Margin notes")
+      .setDesc("Shows notes in the outer margin: write “> [!margin] text” callouts in a note, or double-click a highlight to add one.")
+      .addToggle((t) => t.setValue(s.marginNotes).onChange((v) => ((s.marginNotes = v), save())));
+    new Setting(containerEl)
+      .setName("Shelf")
+      .setDesc("Start on the shelf of all your notebooks instead of the desk.")
+      .addToggle((t) => t.setValue(s.shelfMode).onChange((v) => ((s.shelfMode = v), save())));
     new Setting(containerEl)
       .setName("Paper")
       .setDesc("Page style for handwritten view.")
@@ -220,10 +277,91 @@ export class FlipViewSettingTab extends PluginSettingTab {
       .setDesc("0 is neat and even. Higher values make words wobble, tilt and drift off the line.")
       .addSlider((sl) => sl.setLimits(0, 100, 5).setValue(s.messiness).setDynamicTooltip().onChange((v) => ((s.messiness = v), save())));
     new Setting(containerEl)
+      .setName("Uneven line spacing")
+      .setDesc("How much the spacing between lines wanders, like real handwriting. Has no effect on ruled paper, where words stay on the line.")
+      .addSlider((sl) => sl.setLimits(0, 100, 5).setValue(s.lineVariance).setDynamicTooltip().onChange((v) => ((s.lineVariance = v), save())));
+    new Setting(containerEl)
       .setName("Ink colour")
       .setDesc("Reset to use the theme's default ink.")
       .addColorPicker((c) => c.setValue(s.inkColor || "#2b2a4c").onChange((v) => ((s.inkColor = v), save())))
       .addExtraButton((b) => b.setIcon("rotate-ccw").setTooltip("Reset").onClick(() => ((s.inkColor = ""), save(), this.display())));
+
+    new Setting(containerEl).setName("Index page").setHeading();
+
+    containerEl.createEl("p", { cls: "setting-item-description", text: "Every notebook starts with a contents page. Click an entry to jump straight to that note. Choose what it shows." });
+    const idxToggle = (name: string, key: "indexEnabled" | "indexPageNumbers" | "indexLastEdited" | "indexCreated" | "indexSections" | "indexStatus" | "indexBookmarks", desc = "") =>
+      new Setting(containerEl).setName(name).setDesc(desc).addToggle((t) => t.setValue(s[key]).onChange((v) => ((s[key] = v), save())));
+    idxToggle("Show an index page", "indexEnabled", "Turn off to open notebooks straight to the first note.");
+    new Setting(containerEl)
+      .setName("Index title")
+      .addText((t) => t.setPlaceholder("Contents").setValue(s.indexTitle).onChange((v) => ((s.indexTitle = v), save())));
+    idxToggle("Page numbers", "indexPageNumbers", "Numbers marked ~ are estimates until every note has been laid out.");
+    idxToggle("Last edited dates", "indexLastEdited");
+    idxToggle("Created dates", "indexCreated");
+    idxToggle("Section headings", "indexSections", "Shows your separator pages as sections.");
+    idxToggle("Read status", "indexStatus", "○ unread, ● opened, ✓ finished.");
+    idxToggle("Bookmark stars", "indexBookmarks");
+    new Setting(containerEl)
+      .setName("Dot leaders")
+      .addDropdown((d) =>
+        d
+          .addOption("dots", "Dotted")
+          .addOption("line", "Solid line")
+          .addOption("none", "None")
+          .setValue(s.indexLeader)
+          .onChange((v) => ((s.indexLeader = v as FlipViewSettings["indexLeader"]), save())),
+      );
+    new Setting(containerEl)
+      .setName("Date format")
+      .addDropdown((d) =>
+        d
+          .addOption("short", "8 Nov 2026")
+          .addOption("long", "Sun, 8 November 2026")
+          .addOption("relative", "3 days ago")
+          .setValue(s.indexDates)
+          .onChange((v) => ((s.indexDates = v as FlipViewSettings["indexDates"]), save())),
+      );
+
+    new Setting(containerEl).setName("Reading progress").setHeading();
+
+    new Setting(containerEl)
+      .setName("Track reading progress")
+      .setDesc("Remembers which notes you've opened in the book. Stored in the plugin's data, never in your notes.")
+      .addToggle((t) => t.setValue(s.trackProgress).onChange((v) => ((s.trackProgress = v), save())));
+    new Setting(containerEl)
+      .setName("A note counts as read when")
+      .addDropdown((d) =>
+        d
+          .addOption("opened", "It has been opened")
+          .addOption("finished", "I've reached its last page")
+          .addOption("pages", "Count pages read (partial credit)")
+          .setValue(s.progressMode)
+          .onChange((v) => ((s.progressMode = v as FlipViewSettings["progressMode"]), save())),
+      );
+    new Setting(containerEl)
+      .setName("Indicator style")
+      .addDropdown((d) =>
+        d
+          .addOption("ring", "Ring")
+          .addOption("bar", "Bar")
+          .addOption("count", "Count (3/5)")
+          .setValue(s.progressStyle)
+          .onChange((v) => ((s.progressStyle = v as FlipViewSettings["progressStyle"]), save())),
+      );
+    new Setting(containerEl).setName("Show on the notebook list").addToggle((t) => t.setValue(s.progressSidebar).onChange((v) => ((s.progressSidebar = v), save())));
+    new Setting(containerEl).setName("Show on the cover").addToggle((t) => t.setValue(s.progressCover).onChange((v) => ((s.progressCover = v), save())));
+    new Setting(containerEl).setName("Show on shelf spines").addToggle((t) => t.setValue(s.progressShelf).onChange((v) => ((s.progressShelf = v), save())));
+    new Setting(containerEl)
+      .setName("Recently read list")
+      .setDesc("The last few notes you read, above the notebook list.")
+      .addToggle((t) => t.setValue(s.showRecent).onChange((v) => ((s.showRecent = v), save())))
+      .addSlider((sl) => sl.setLimits(1, 10, 1).setValue(s.recentCount).setDynamicTooltip().onChange((v) => ((s.recentCount = v), save())));
+    new Setting(containerEl)
+      .setName("Reset")
+      .setDesc("Clear reading history, bookmarks, or everything written in the books (ink and typed text). Your notes are never touched.")
+      .addButton((b) => b.setButtonText("Reading history").onClick(() => ((s.readState = {}), save())))
+      .addButton((b) => b.setButtonText("Bookmarks").onClick(() => ((s.bookmarks = {}), save())))
+      .addButton((b) => b.setButtonText("Ink and text").setWarning().onClick(() => ((s.annotations = {}), save())));
 
     new Setting(containerEl).setName("Highlighters").setHeading();
 

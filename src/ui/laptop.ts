@@ -26,7 +26,9 @@ export class Laptop {
 
   constructor(parent: HTMLElement, private cb: { close(): void; openExternal(url: string): void }) {
     this.el = parent.createDiv({ cls: "fv-laptop", attr: { "aria-hidden": "true" } });
-    const lid = this.el.createDiv({ cls: "fv-laptop-lid" });
+    const rig = this.el.createDiv({ cls: "fv-laptop-rig" });
+    rig.createDiv({ cls: "fv-laptop-shadow" });
+    const lid = rig.createDiv({ cls: "fv-laptop-lid" });
     const screen = lid.createDiv({ cls: "fv-laptop-screen" });
     const bar = screen.createDiv({ cls: "fv-laptop-bar" });
     const dots = bar.createDiv({ cls: "fv-laptop-dots" });
@@ -45,9 +47,9 @@ export class Laptop {
     const open = this.fallback.createEl("button", { cls: "mod-cta", text: "Open in your browser", attr: { type: "button" } });
     open.addEventListener("click", () => this.url && this.cb.openExternal(this.url));
     lid.createDiv({ cls: "fv-laptop-cam" });
-    const base = this.el.createDiv({ cls: "fv-laptop-base" });
-    base.createDiv({ cls: "fv-laptop-keys" });
-    base.createDiv({ cls: "fv-laptop-pad" });
+    const deck = rig.createDiv({ cls: "fv-laptop-deck" });
+    deck.createDiv({ cls: "fv-laptop-keys" });
+    deck.createDiv({ cls: "fv-laptop-pad" });
   }
 
   get isOpen(): boolean {

@@ -1,5 +1,5 @@
 import { App, Modal, Setting } from "obsidian";
-import { CoverStyle, FlipViewSettings, Notebook } from "./types";
+import { BandStyle, CoverStyle, FlipViewSettings, Notebook, PaperColor, SpineStyle } from "./types";
 
 export class NewNotebookModal extends Modal {
   private name = "";
@@ -41,7 +41,9 @@ export class HelpModal extends Modal {
     this.titleEl.setText("Flip View");
     const ul = contentEl.createEl("ul");
     [
-      "Pick a notebook on the left, then click its cover to flip it open.",
+      "Pick a notebook on the left, then click its cover to flip it open. The shelf button (next to the sidebar button) shows all your notebooks on a shelf; click a spine to pull one out.",
+      "Every notebook starts with a contents page: click an entry to jump to that note.",
+      "In handwritten view the pens at the bottom right let you draw and type on the pages; double-click a highlight to recolour it, add a margin note, or remove it.",
       "Turn pages with the arrow keys, the page edges, or the arrows under the book. Turning back past the first page closes the notebook.",
       "Switch between Handwritten and Text at the top. Text uses your own note font; handwriting is generated from the same text.",
       "Links in your notes work inside the book: a link to another note flips to it (or moves to its notebook), and a web link opens on a laptop on the desk. Ctrl/Cmd-click opens the real note or your browser.",
@@ -123,6 +125,38 @@ export const COVER_STYLE_OPTIONS: Array<[CoverStyle, string]> = [
   ["watercolor", "Watercolour"],
   ["terrazzo", "Terrazzo"],
   ["waves", "Waves"],
+  ["suede", "Suede"],
+  ["canvas", "Canvas"],
+  ["cork", "Cork"],
+  ["woodgrain", "Wood grain"],
+  ["denim", "Denim"],
+];
+
+export const SPINE_OPTIONS: Array<[SpineStyle, string]> = [
+  ["banded", "Gold bands"],
+  ["plain", "Plain"],
+  ["striped", "Striped"],
+  ["foil", "Foil title"],
+  ["label", "Paper label"],
+  ["ribbed", "Ribbed (raised bands)"],
+];
+
+export const BAND_OPTIONS: Array<[BandStyle, string]> = [
+  ["vertical", "Vertical strap"],
+  ["horizontal", "Horizontal strap"],
+  ["double", "Cross straps"],
+  ["none", "No strap"],
+];
+
+export const PAPER_OPTIONS: Array<[PaperColor, string]> = [
+  ["cream", "Cream"],
+  ["white", "White"],
+  ["ivory", "Ivory"],
+  ["yellow", "Legal pad yellow"],
+  ["grey", "Soft grey"],
+  ["blue", "Blueprint blue"],
+  ["sepia", "Sepia"],
+  ["custom", "Custom colour"],
 ];
 
 /** Per-notebook cover options: style, colour and a fresh random seed. */
@@ -140,7 +174,7 @@ export class CoverModal extends Modal {
     const ov = () => (s.coverOverrides[id] ??= {});
     const tidy = () => {
       const o = s.coverOverrides[id];
-      if (o && !o.style && !o.color) delete s.coverOverrides[id];
+      if (o && !o.style && !o.color && !o.spine && !o.band && !o.bandColor && !o.ribbonColor && !o.paper) delete s.coverOverrides[id];
     };
 
     new Setting(contentEl)
@@ -169,6 +203,66 @@ export class CoverModal extends Modal {
             this.onOpen();
           }),
       );
+
+    new Setting(contentEl)
+      .setName("Spine design")
+      .setDesc("How the spine looks on the shelf.")
+      .addDropdown((d) => {
+        d.addOption("", "Same as default");
+        SPINE_OPTIONS.forEach(([v, l]) => d.addOption(v, l));
+        d.setValue(s.coverOverrides[id]?.spine ?? "").onChange((v) => {
+          ov().spine = (v || undefined) as SpineStyle | undefined;
+          tidy();
+        });
+      });
+
+    new Setting(contentEl)
+      .setName("Elastic strap")
+      .addDropdown((d) => {
+        d.addOption("", "Same as default");
+        BAND_OPTIONS.forEach(([v, l]) => d.addOption(v, l));
+        d.setValue(s.coverOverrides[id]?.band ?? "").onChange((v) => {
+          ov().band = (v || undefined) as BandStyle | undefined;
+          tidy();
+        });
+      })
+      .addColorPicker((c) => c.setValue(s.coverOverrides[id]?.bandColor || s.bandColor || "#3a2f4d").onChange((v) => ((ov().bandColor = v), tidy())))
+      .addExtraButton((b) =>
+        b
+          .setIcon("rotate-ccw")
+          .setTooltip("Reset strap colour")
+          .onClick(() => {
+            if (s.coverOverrides[id]) delete s.coverOverrides[id].bandColor;
+            tidy();
+            this.onOpen();
+          }),
+      );
+
+    new Setting(contentEl)
+      .setName("Ribbon colour")
+      .addColorPicker((c) => c.setValue(s.coverOverrides[id]?.ribbonColor || s.ribbonColor).onChange((v) => ((ov().ribbonColor = v), tidy())))
+      .addExtraButton((b) =>
+        b
+          .setIcon("rotate-ccw")
+          .setTooltip("Reset ribbon colour")
+          .onClick(() => {
+            if (s.coverOverrides[id]) delete s.coverOverrides[id].ribbonColor;
+            tidy();
+            this.onOpen();
+          }),
+      );
+
+    new Setting(contentEl)
+      .setName("Paper")
+      .setDesc("The colour of this notebook's pages.")
+      .addDropdown((d) => {
+        d.addOption("", "Same as default");
+        PAPER_OPTIONS.filter(([v]) => v !== "custom").forEach(([v, l]) => d.addOption(v, l));
+        d.setValue(s.coverOverrides[id]?.paper ?? "").onChange((v) => {
+          ov().paper = (v || undefined) as PaperColor | undefined;
+          tidy();
+        });
+      });
 
     new Setting(contentEl)
       .setName("Shuffle")

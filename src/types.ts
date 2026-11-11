@@ -4,9 +4,11 @@ export interface NoteRef {
   title: string;
   mtime: number;
   ctime: number;
-  kind?: "note" | "separator";
+  kind?: "note" | "separator" | "index";
   /** Separators only. */
   sepId?: string;
+  /** File size in bytes (notes only), used to estimate page counts before a note has been laid out. */
+  size?: number;
 }
 
 export interface Notebook {
@@ -21,7 +23,10 @@ export interface Notebook {
 }
 
 export const isSeparator = (n: NoteRef | undefined | null): boolean => n?.kind === "separator";
-export const realNoteCount = (nb: Notebook): number => nb.notes.filter((n) => n.kind !== "separator").length;
+export const isIndex = (n: NoteRef | undefined | null): boolean => n?.kind === "index";
+/** A real note, not a separator page or the index. */
+export const isNote = (n: NoteRef | undefined | null): boolean => !!n && n.kind !== "separator" && n.kind !== "index";
+export const realNoteCount = (nb: Notebook): number => nb.notes.filter(isNote).length;
 
 export type ViewMode = "handwritten" | "text";
 export type GroupBy = "folder" | "property";
@@ -37,8 +42,20 @@ export type CoverStyle =
   | "gradient"
   | "watercolor"
   | "terrazzo"
-  | "waves";
+  | "waves"
+  | "suede"
+  | "canvas"
+  | "cork"
+  | "woodgrain"
+  | "denim";
 export type CoverLabel = "plate" | "foil" | "sticker";
+export type SpineStyle = "plain" | "banded" | "striped" | "foil" | "label" | "ribbed";
+export type BandStyle = "none" | "vertical" | "horizontal" | "double";
+export type PaperColor = "cream" | "white" | "ivory" | "yellow" | "grey" | "blue" | "sepia" | "custom";
+export type PageTexture = "fine" | "none" | "rough" | "laid" | "linen" | "speckled";
+export type PageLayout = "classic" | "realistic" | "wide";
+export type WriteTool = "pen" | "pencil" | "marker" | "text" | "eraser";
+export type ProgressMode = "opened" | "finished" | "pages";
 export type TextCase = "normal" | "smallcaps" | "uppercase";
 export type PaperStyle = "plain" | "lined" | "grid" | "dotted";
 export type HandFont =
@@ -50,7 +67,18 @@ export type HandFont =
   | "shadows-into-light"
   | "dancing-script"
   | "alex-brush"
-  | "la-belle-aurore";
+  | "la-belle-aurore"
+  | "great-vibes"
+  | "allura"
+  | "architects-daughter"
+  | "gochi-hand"
+  | "covered-by-your-grace"
+  | "handlee"
+  | "schoolbell"
+  | "just-another-hand"
+  | "zeyada"
+  | "nothing-you-could-do"
+  | "permanent-marker";
 
 export interface HighlighterDef {
   color: string;
@@ -66,11 +94,52 @@ export interface Highlight {
   /** Index into the highlighter list; `color` is the fallback if that highlighter was removed. */
   slot: number;
   color: string;
+  /** Optional margin note typed against the highlight. */
+  note?: string;
+}
+
+/** Freehand ink or typed text written on a page. Coordinates are fractions of the page (0..1). */
+export interface Annotation {
+  id: string;
+  kind: "stroke" | "text";
+  /** Page index within the note. */
+  page: number;
+  tool: WriteTool;
+  color: string;
+  /** Stroke: flat [x0, y0, x1, y1, ...]. */
+  points?: number[];
+  /** Text: top-left position and the text itself. */
+  x?: number;
+  y?: number;
+  text?: string;
+}
+
+export interface ReadEntry {
+  /** First time the note was opened in the book (ms). */
+  opened: number;
+  /** Most recent time it was open (ms). */
+  last: number;
+  visits: number;
+  /** Furthest spread reached, and how many spreads the note had then. */
+  maxSpread: number;
+  spreads: number;
+  finished: boolean;
+}
+
+export interface Bookmark {
+  path: string;
+  spread: number;
+  at: number;
 }
 
 export interface CoverOverride {
   style?: CoverStyle;
   color?: string;
+  spine?: SpineStyle;
+  band?: BandStyle;
+  bandColor?: string;
+  ribbonColor?: string;
+  paper?: PaperColor;
 }
 
 export interface FlipViewSettings {
@@ -98,8 +167,45 @@ export interface FlipViewSettings {
   accentColor: string;
   coverColor: string;
   coverLabel: CoverLabel;
-  coverBand: boolean;
+  bandStyle: BandStyle;
+  bandColor: string;
+  spineStyle: SpineStyle;
+  ribbon: boolean;
+  ribbonColor: string;
+  paperColor: PaperColor;
+  paperCustom: string;
+  pageTexture: PageTexture;
+  pageLayout: PageLayout;
+  marginNotes: boolean;
+  /** 0..100: how much line spacing wanders in handwriting (ignored on ruled paper). */
+  lineVariance: number;
   outlineCollapsed: boolean;
+  shelfMode: boolean;
+
+  // index page
+  indexEnabled: boolean;
+  indexTitle: string;
+  indexPageNumbers: boolean;
+  indexLastEdited: boolean;
+  indexCreated: boolean;
+  indexSections: boolean;
+  indexStatus: boolean;
+  indexBookmarks: boolean;
+  indexLeader: "dots" | "line" | "none";
+  indexDates: "short" | "long" | "relative";
+
+  // reading progress
+  trackProgress: boolean;
+  progressMode: ProgressMode;
+  progressStyle: "ring" | "bar" | "count";
+  progressSidebar: boolean;
+  progressCover: boolean;
+  progressShelf: boolean;
+  showRecent: boolean;
+  recentCount: number;
+
+  // writing tools
+  writeColors: Record<"pen" | "pencil" | "marker", string>;
 
   // handwriting
   handFont: HandFont;
@@ -137,6 +243,12 @@ export interface FlipViewSettings {
   coverOverrides: Record<string, CoverOverride>;
   /** note path -> highlights */
   highlights: Record<string, Highlight[]>;
+  /** note path -> ink and typed text */
+  annotations: Record<string, Annotation[]>;
+  /** note path -> reading history */
+  readState: Record<string, ReadEntry>;
+  /** notebook id -> bookmarks */
+  bookmarks: Record<string, Bookmark[]>;
 }
 
 export const DEFAULT_SETTINGS: FlipViewSettings = {
@@ -161,8 +273,41 @@ export const DEFAULT_SETTINGS: FlipViewSettings = {
   accentColor: "",
   coverColor: "",
   coverLabel: "plate",
-  coverBand: true,
+  bandStyle: "vertical",
+  bandColor: "",
+  spineStyle: "banded",
+  ribbon: true,
+  ribbonColor: "#b5303a",
+  paperColor: "cream",
+  paperCustom: "#f4ead2",
+  pageTexture: "fine",
+  pageLayout: "realistic",
+  marginNotes: true,
+  lineVariance: 30,
   outlineCollapsed: false,
+  shelfMode: false,
+
+  indexEnabled: true,
+  indexTitle: "Contents",
+  indexPageNumbers: true,
+  indexLastEdited: true,
+  indexCreated: false,
+  indexSections: true,
+  indexStatus: true,
+  indexBookmarks: true,
+  indexLeader: "dots",
+  indexDates: "short",
+
+  trackProgress: true,
+  progressMode: "opened",
+  progressStyle: "ring",
+  progressSidebar: true,
+  progressCover: true,
+  progressShelf: true,
+  showRecent: true,
+  recentCount: 5,
+
+  writeColors: { pen: "#1d2a6b", pencil: "#4b4b55", marker: "#ff5fa8" },
 
   handFont: "caveat",
   handSize: 100,
@@ -196,6 +341,9 @@ export const DEFAULT_SETTINGS: FlipViewSettings = {
   notebookNames: {},
   coverOverrides: {},
   highlights: {},
+  annotations: {},
+  readState: {},
+  bookmarks: {},
 };
 
 /** A fresh settings object that shares no mutable state with the defaults. */

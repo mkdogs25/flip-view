@@ -16,6 +16,11 @@ export const COVER_STYLES: ConcreteStyle[] = [
   "watercolor",
   "terrazzo",
   "waves",
+  "suede",
+  "canvas",
+  "cork",
+  "woodgrain",
+  "denim",
 ];
 
 interface Tint {
@@ -94,15 +99,21 @@ function sparkle(ctx: Ctx, x: number, y: number, s: number): void {
 }
 
 /** Per-pixel painter: fills the canvas by evaluating `shade` for every pixel and adds film grain. */
+/** Low-resolution mode paints every third pixel and scales up: ~9x cheaper, used for shelf spines. */
+let LOW = false;
+
 function paintPixels(ctx: Ctx, seed: number, grain: number, shade: (x: number, y: number, out: RGB) => void): void {
-  const img = ctx.createImageData(W, H);
+  const step = LOW ? 3 : 1;
+  const w = Math.ceil(W / step);
+  const h = Math.ceil(H / step);
+  const img = ctx.createImageData(w, h);
   const d = img.data;
   const g = mulberry32(seed ^ 0xa5a5a5a5);
   const out: RGB = [0, 0, 0];
   let i = 0;
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-      shade(x, y, out);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      shade(x * step, y * step, out);
       const n = (g() - 0.5) * grain;
       d[i++] = clamp(out[0] + n, 0, 255);
       d[i++] = clamp(out[1] + n, 0, 255);
@@ -110,10 +121,20 @@ function paintPixels(ctx: Ctx, seed: number, grain: number, shade: (x: number, y
       d[i++] = 255;
     }
   }
-  ctx.putImageData(img, 0, 0);
+  if (step === 1) {
+    ctx.putImageData(img, 0, 0);
+    return;
+  }
+  const tmp = document.createElement("canvas");
+  tmp.width = w;
+  tmp.height = h;
+  tmp.getContext("2d")?.putImageData(img, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(tmp, 0, 0, W, H);
 }
 
 function addGrain(ctx: Ctx, seed: number, amount: number): void {
+  if (LOW) return;
   const img = ctx.getImageData(0, 0, W, H);
   const d = img.data;
   const g = mulberry32(seed ^ 0x5bd1e995);
@@ -692,6 +713,106 @@ function paintWaves(ctx: Ctx, rng: Rng, seed: number, tint: Tint | null): Theme 
   return { base: m, dark: hsl(h0 + step * layers, 0.6, 0.18), light: hsl(h0 - step, 0.7, 0.85) };
 }
 
+/* ------------------------------------------------------------------ suede */
+
+function paintSuede(ctx: Ctx, rng: Rng, seed: number, tint: Tint | null): Theme {
+  const noise = makeNoise(seed);
+  const base = tint ? hsl(tint.h, Math.min(0.7, tint.s), clamp(tint.l, 0.15, 0.6)) : hsl(rng.range(0, 360), rng.range(0.3, 0.6), rng.range(0.28, 0.46));
+  paintPixels(ctx, seed, 18, (x, y, o) => {
+    const nap = noise.noise(x / 1.6 + Math.sin(y / 70) * 4, y / 1.3);
+    const cloud = noise.fbm(x / 60, y / 60, 3);
+    const t = 0.8 + nap * 0.26 + cloud * 0.22;
+    o[0] = base[0] * t;
+    o[1] = base[1] * t;
+    o[2] = base[2] * t;
+  });
+  return { base, dark: mix(base, [0, 0, 0], 0.5), light: mix(base, [255, 255, 255], 0.5) };
+}
+
+/* ----------------------------------------------------------------- canvas */
+
+function paintCanvas(ctx: Ctx, rng: Rng, seed: number, tint: Tint | null): Theme {
+  const noise = makeNoise(seed);
+  const base = tint ? hsl(tint.h, Math.min(0.5, tint.s), clamp(tint.l, 0.25, 0.7)) : hsl(rng.range(25, 50), rng.range(0.12, 0.3), rng.range(0.5, 0.66));
+  paintPixels(ctx, seed, 12, (x, y, o) => {
+    const wx = Math.sin(x * 0.9) * 0.5 + 0.5;
+    const wy = Math.sin(y * 0.9) * 0.5 + 0.5;
+    const over = ((Math.floor(x / 3.5) + Math.floor(y / 3.5)) & 1) === 1;
+    const slub = noise.fbm(over ? x / 2 : x / 40, over ? y / 40 : y / 2, 2);
+    const t = 0.74 + (over ? wx : wy) * 0.2 + slub * 0.3 + (noise.fbm(x / 140, y / 140, 3) - 0.5) * 0.16;
+    o[0] = base[0] * t;
+    o[1] = base[1] * t;
+    o[2] = base[2] * t;
+  });
+  ctx.strokeStyle = "rgba(0,0,0,.18)";
+  ctx.lineWidth = 3;
+  ctx.setLineDash([14, 8]);
+  roundedRect(ctx, 38, 38, W - 76, H - 76, 6);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  return { base, dark: mix(base, [0, 0, 0], 0.55), light: mix(base, [255, 255, 255], 0.5) };
+}
+
+/* ------------------------------------------------------------------- cork */
+
+function paintCork(ctx: Ctx, rng: Rng, seed: number, tint: Tint | null): Theme {
+  const noise = makeNoise(seed);
+  const base: RGB = tint ? hsl(tint.h, Math.min(0.55, tint.s), clamp(tint.l, 0.3, 0.6)) : [194, 150, 102];
+  rng.float();
+  paintPixels(ctx, seed, 16, (x, y, o) => {
+    const cell = noise.noise(x / 5, y / 5);
+    const pit = smoothstep(0.64, 0.74, cell);
+    const gran = noise.noise(x / 2.2 + 40, y / 2.2);
+    const t = 0.82 + noise.fbm(x / 34, y / 34, 3) * 0.3 - pit * 0.38 + (gran - 0.5) * 0.22;
+    o[0] = base[0] * t;
+    o[1] = base[1] * t;
+    o[2] = base[2] * t;
+  });
+  return { base, dark: mix(base, [30, 14, 0], 0.6), light: mix(base, [255, 240, 215], 0.55) };
+}
+
+/* ------------------------------------------------------------------- wood */
+
+function paintWood(ctx: Ctx, rng: Rng, seed: number, tint: Tint | null): Theme {
+  const noise = makeNoise(seed);
+  const base = tint ? hsl(tint.h, Math.min(0.6, tint.s), clamp(tint.l, 0.2, 0.55)) : hsl(rng.range(18, 36), rng.range(0.4, 0.6), rng.range(0.3, 0.44));
+  const freq = rng.range(7, 12);
+  paintPixels(ctx, seed, 8, (x, y, o) => {
+    const warp = noise.fbm(x / 220, y / 70, 3);
+    const rings = Math.sin(x / freq + warp * 16) * 0.5 + 0.5;
+    const streak = noise.noise(x / 2, y / 46);
+    const t = 0.7 + rings * 0.16 + streak * 0.22 + noise.fbm(x / 90, y / 90, 2) * 0.12;
+    o[0] = base[0] * t;
+    o[1] = base[1] * t;
+    o[2] = base[2] * t;
+  });
+  return { base, dark: mix(base, [20, 8, 0], 0.55), light: mix(base, [255, 235, 200], 0.55) };
+}
+
+/* ------------------------------------------------------------------ denim */
+
+function paintDenim(ctx: Ctx, rng: Rng, seed: number, tint: Tint | null): Theme {
+  const noise = makeNoise(seed);
+  const base = tint ? hsl(tint.h, Math.min(0.7, tint.s), clamp(tint.l, 0.18, 0.5)) : hsl(rng.range(205, 225), rng.range(0.35, 0.5), rng.range(0.26, 0.36));
+  paintPixels(ctx, seed, 12, (x, y, o) => {
+    const diag = ((x + y) % 6) / 6;
+    const fibre = noise.noise(x / 1.4, y / 1.4);
+    const fade = noise.fbm(x / 120, y / 120, 3);
+    const t = 0.72 + diag * 0.18 + (fibre - 0.5) * 0.3 + fade * 0.28;
+    o[0] = base[0] * t;
+    o[1] = base[1] * t;
+    o[2] = base[2] * t;
+  });
+  ctx.strokeStyle = "rgba(232,166,74,.9)";
+  ctx.lineWidth = 3.2;
+  ctx.setLineDash([12, 7]);
+  ctx.lineCap = "round";
+  roundedRect(ctx, 40, 40, W - 80, H - 80, 14);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  return { base, dark: mix(base, [0, 0, 0], 0.5), light: [232, 166, 74] };
+}
+
 /* ------------------------------------------------------------------ finish */
 
 function finish(ctx: Ctx, rng: Rng): void {
@@ -738,8 +859,8 @@ function finish(ctx: Ctx, rng: Rng): void {
 const cache = new Map<string, CoverResult>();
 
 /** Generates (and memoises) a cover image. Fully deterministic for a given seed and style. */
-export function generateCover(seed: number, requested: CoverStyle, color = ""): CoverResult {
-  const key = `${seed}|${requested}|${color}`;
+export function generateCover(seed: number, requested: CoverStyle, color = "", low = false): CoverResult {
+  const key = `${seed}|${requested}|${color}|${low ? "low" : "full"}`;
   const hit = cache.get(key);
   if (hit) return hit;
   const rng = new Rng(seed ^ 0x1234567);
@@ -750,7 +871,9 @@ export function generateCover(seed: number, requested: CoverStyle, color = ""): 
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Canvas 2D is not available");
   const tint = parseTint(color);
+  LOW = low;
   let theme: Theme;
+  try {
   switch (style) {
     case "cosmic":
       theme = paintCosmic(ctx, rng, seed, tint);
@@ -782,8 +905,26 @@ export function generateCover(seed: number, requested: CoverStyle, color = ""): 
     case "waves":
       theme = paintWaves(ctx, rng, seed, tint);
       break;
+    case "suede":
+      theme = paintSuede(ctx, rng, seed, tint);
+      break;
+    case "canvas":
+      theme = paintCanvas(ctx, rng, seed, tint);
+      break;
+    case "cork":
+      theme = paintCork(ctx, rng, seed, tint);
+      break;
+    case "woodgrain":
+      theme = paintWood(ctx, rng, seed, tint);
+      break;
+    case "denim":
+      theme = paintDenim(ctx, rng, seed, tint);
+      break;
     default:
       theme = paintGeometric(ctx, rng, seed, tint);
+  }
+  } finally {
+    LOW = false;
   }
   finish(ctx, rng);
   const result: CoverResult = {

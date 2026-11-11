@@ -33,6 +33,8 @@ const pageNums = (page) => page.$$eval(".fv-pagebase .fv-page-no", (els) => els.
   let page = await fresh(browser, "theme=light&mode=handwritten&paper=lined");
   await page.click(".fv-cover-front");
   await wait(1800);
+  await page.click(".fv-ol-row:nth-child(2) .fv-ol-label"); // the book opens on the index; go to the first note
+  await wait(1700);
   // clicks a link that is actually visible inside a page (pages are clipped clones, so hidden-column copies exist too)
   const link = (text) => ({
     click: async () => {
@@ -57,7 +59,7 @@ const pageNums = (page) => page.$$eval(".fv-pagebase .fv-page-no", (els) => els.
   assert((await footTitle(page)) === "Thermodynamics", "link to a note in the same notebook flips to it");
 
   // go back to Quantum Mechanics through the contents to click the next links
-  await page.click(".fv-ol-row:nth-child(1) .fv-ol-label");
+  await page.click(".fv-ol-row:nth-child(2) .fv-ol-label");
   await wait(1600);
   await link("time dilation").click();
   await wait(1800);
@@ -65,7 +67,7 @@ const pageNums = (page) => page.$$eval(".fv-pagebase .fv-page-no", (els) => els.
   const heads = await page.$$eval(".fv-pagebase .fv-flow h2", (els) => els.map((e) => e.textContent));
   assert(t === "Relativity" && heads.some((h) => /Time Dilation/i.test(h)), `heading link lands on the page with the heading (${t}; ${heads})`);
 
-  await page.click(".fv-ol-row:nth-child(1) .fv-ol-label");
+  await page.click(".fv-ol-row:nth-child(2) .fv-ol-label");
   await wait(1600);
   await link("Garden Plan").click();
   await wait(4200);
@@ -73,7 +75,7 @@ const pageNums = (page) => page.$$eval(".fv-pagebase .fv-page-no", (els) => els.
   assert((await footTitle(page)) === "Garden Plan", `...and opens it (${await footTitle(page)})`);
 
   // external link -> laptop
-  await page.click(".fv-ol-row:nth-child(1) .fv-ol-label");
+  await page.click(".fv-ol-row:nth-child(2) .fv-ol-label");
   await wait(1500);
   const before = await page.$eval(".fv-bookwrap", (e) => e.getBoundingClientRect().left);
   assert((await selected(page)) === "Projects", "(still in Projects)");
@@ -81,6 +83,10 @@ const pageNums = (page) => page.$$eval(".fv-pagebase .fv-page-no", (els) => els.
   await wait(600);
   await page.click(".fv-cover-front");
   await wait(1800);
+  await page.click(".fv-ol-row:nth-child(2) .fv-ol-label");
+  await wait(1700);
+  await page.keyboard.press("ArrowRight");
+  await wait(1300);
   await link("external page").click();
   await wait(1700);
   assert(await page.$eval(".fv-laptop", (e) => e.classList.contains("is-open")), "external link opens the laptop");
@@ -100,6 +106,8 @@ const pageNums = (page) => page.$$eval(".fv-pagebase .fv-page-no", (els) => els.
   page = await fresh(browser, "theme=light&mode=text&flip=click");
   await page.click(".fv-cover-front");
   await wait(1800);
+  await page.click(".fv-ol-row:nth-child(2) .fv-ol-label");
+  await wait(1700);
   const p0 = await pageNums(page);
   await page.mouse.click(1000, 450); // right page body
   await wait(1300);
@@ -114,6 +122,8 @@ const pageNums = (page) => page.$$eval(".fv-pagebase .fv-page-no", (els) => els.
   page = await fresh(browser, "theme=light&mode=text&flip=nav");
   await page.click(".fv-cover-front");
   await wait(1800);
+  await page.click(".fv-ol-row:nth-child(2) .fv-ol-label");
+  await wait(1700);
   const n0 = await pageNums(page);
   await page.mouse.click(1000, 450);
   await wait(1200);
@@ -127,6 +137,8 @@ const pageNums = (page) => page.$$eval(".fv-pagebase .fv-page-no", (els) => els.
   page = await fresh(browser, "theme=light&mode=text&flip=drag");
   await page.click(".fv-cover-front");
   await wait(1800);
+  await page.click(".fv-ol-row:nth-child(2) .fv-ol-label");
+  await wait(1700);
   const d0 = await pageNums(page);
   const edge = await page.$eval(".fv-edge-right", (e) => {
     const r = e.getBoundingClientRect();

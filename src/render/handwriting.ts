@@ -8,7 +8,7 @@ const SKIP = "svg, script, style, mjx-container, .math, .fv-skip, textarea, inpu
  * always looks identically hand-written. `messiness` is 0..1; `tame` scales the vertical drift and tilt (used on ruled paper,
  * where words should stay on the line).
  */
-export function handwrite(root: HTMLElement, seed: string, messiness: number, tame = 1): void {
+export function handwrite(root: HTMLElement, seed: string, messiness: number, tame = 1, lineVar = 0): void {
   const rng = new Rng(hashString(seed));
   const m = Math.max(0, Math.min(1, messiness));
   const doc = root.ownerDocument;
@@ -54,6 +54,16 @@ export function handwrite(root: HTMLElement, seed: string, messiness: number, ta
     root.querySelectorAll<HTMLElement>("p, li").forEach((el) => {
       const off = rng.gauss() * m * 7;
       if (Math.abs(off) > 0.5) el.style.marginLeft = `${off.toFixed(1)}px`;
+    });
+  }
+
+  // slightly uneven line spacing, like a hand that doesn't quite hold a steady rhythm
+  if (lineVar > 0) {
+    root.querySelectorAll<HTMLElement>("p, li, h1, h2, h3, h4, h5, h6, blockquote").forEach((el) => {
+      const f = 1 + rng.gauss() * lineVar * 0.1;
+      el.style.lineHeight = `calc(var(--fv-lh) * ${f.toFixed(3)})`;
+      const g = 1 + rng.gauss() * lineVar * 0.35;
+      if (el.tagName === "P") el.style.marginBottom = `calc(var(--fv-gap) * ${g.toFixed(3)})`;
     });
   }
 

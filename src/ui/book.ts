@@ -3,11 +3,15 @@ import { generateCover } from "../render/cover";
 import { handFontInfo } from "../render/fonts";
 import { applyHighlight, highlightColor, removeHighlightEls, textOffsetOf } from "../render/highlights";
 import { Sfx } from "../render/sound";
-import { Highlight, Notebook, NotebookHost, ViewMode, isSeparator, realNoteCount } from "../types";
+import { notebookProgress, noteStatus } from "../progress";
+import { Annotation, Bookmark, Highlight, NoteRef, Notebook, NotebookHost, ViewMode, WriteTool, isIndex, isNote, isSeparator, realNoteCount } from "../types";
 import { clamp, hashString } from "../util/rng";
-import { formatDate, iconButton } from "./dom";
+import { formatDate, iconButton, progressEl } from "./dom";
 import { Laptop } from "./laptop";
-import { Heading, LayoutConfig, LayoutEngine, NoteLayout } from "./layout";
+import { resolveLook } from "./coverStyle";
+import { ensureInkLayer, makeStrokeEl, renderInk, strokePath } from "./ink";
+import { Heading, IndexData, LayoutConfig, LayoutEngine, NoteLayout } from "./layout";
+import { PageTally } from "./tally";
 
 export interface StageCallbacks {
   toggleSidebar(): void;
@@ -19,6 +23,10 @@ export interface StageCallbacks {
   stateChanged(): void;
   /** The user clicked an internal link inside a page. */
   followInternal(href: string, sourcePath: string): void;
+  /** A real note is now on show (for reading progress). */
+  noteVisited(note: NoteRef, spread: number, spreads: number): void;
+  bookmarksChanged(): void;
+  shelfRequested(): void;
 }
 
 function penCursor(color: string): string {
@@ -44,6 +52,7 @@ export class BookStage {
   private coverBack: HTMLElement;
   private plateTitle: HTMLElement;
   private plateCount: HTMLElement;
+  private plateProg: HTMLElement;
   private band: HTMLElement;
   private measure: HTMLElement;
   private spinner: HTMLElement;
@@ -60,6 +69,16 @@ export class BookStage {
   private sfx: Sfx;
   private activePen: number | null = null;
   private baselineKey = "";
+  private tally = new PageTally();
+  private shownKey = "";
+  private crawlToken = 0;
+  private indexTimer = 0;
+  private writeTool: WriteTool | null = null;
+  private wtray: HTMLElement;
+  private ribbonEl: HTMLElement;
+  private btnBookmark: HTMLButtonElement;
+  private hlPop: HTMLElement;
+  private metricsEx = { iw: 240, ih: 320, pin: 30, pout: 30, mw: 0 };
   private footer: HTMLElement;
   private footerOpen: HTMLElement;
   private footTitle: HTMLButtonElement;
@@ -93,6 +112,7 @@ export class BookStage {
     this.toolbar = this.el.createDiv({ cls: "fv-toolbar" });
     const left = this.toolbar.createDiv({ cls: "fv-toolbar-side fv-toolbar-left" });
     iconButton(left, "panel-left", "Toggle notebook list", "fv-glass").addEventListener("click", () => this.cb.toggleSidebar());
+    iconButton(left, "library-big", "Show the shelf", "fv-glass").addEventListener("click", () => this.cb.shelfRequested());
     this.seg = this.toolbar.createDiv({ cls: "fv-seg" });
     this.seg.createDiv({ cls: "fv-seg-thumb" });
     const mk = (mode: ViewMode, icon: string, label: string) => {
@@ -122,12 +142,15 @@ export class BookStage {
     this.cover = this.book.createDiv({ cls: "fv-cover" });
     this.coverFront = this.cover.createDiv({ cls: "fv-cover-face fv-cover-front" });
     this.band = this.coverFront.createDiv({ cls: "fv-band" });
+    this.coverFront.createDiv({ cls: "fv-bandh" });
+    this.coverFront.createDiv({ cls: "fv-spine-deco" });
     const plate = this.coverFront.createDiv({ cls: "fv-plate" });
     this.plateTitle = plate.createDiv({ cls: "fv-plate-title" });
     const rule = plate.createDiv({ cls: "fv-plate-count" });
     rule.createSpan({ cls: "fv-plate-dash" });
     this.plateCount = rule.createSpan({ cls: "fv-plate-num" });
     rule.createSpan({ cls: "fv-plate-dash" });
+    this.plateProg = plate.createDiv({ cls: "fv-plate-prog" });
     this.coverFront.createDiv({ cls: "fv-shade" });
     this.coverBack = this.cover.createDiv({ cls: "fv-cover-face fv-cover-back" });
     this.coverBack.createDiv({ cls: "fv-shade" });
@@ -170,6 +193,8 @@ export class BookStage {
     this.footCount = this.footerOpen.createSpan({ cls: "fv-foot-count" });
     this.btnNext = iconButton(this.footerOpen, "chevron-right", "Next page");
     this.btnNext.addEventListener("click", () => void this.next());
+    this.btnBookmark = iconButton(this.footerOpen, "bookmark", "Bookmark this page");
+    this.btnBookmark.addEventListener("click", () => this.toggleBookmark());
     this.btnOpenNote = iconButton(this.footerOpen, "file-text", "Open this note");
     this.btnOpenNote.addEventListener("click", (e) => {
       const n = this.currentNote();
@@ -182,12 +207,25 @@ export class BookStage {
     });
     this.el.addEventListener("click", () => this.toc.removeClass("is-open"));
 
+    this.ribbonEl = this.book.createDiv({ cls: "fv-ribbon", attr: { role: "button", "aria-label": "Ribbon bookmark" } });
+    this.ribbonEl.addEventListener("click", (e) => {
+      e.stopPropagation();
+      void this.followRibbon();
+    });
+    this.hlPop = this.el.createDiv({ cls: "fv-hlpop fv-glass" });
+    this.wtray = this.el.createDiv({ cls: "fv-wtray" });
+    this.book.addEventListener("pointerdown", (e) => this.onInkDown(e));
+    this.book.addEventListener("dblclick", (e) => this.onDblClick(e));
+    document.addEventListener("pointerdown", this.onDocPointerDown, true);
     this.tray = this.el.createDiv({ cls: "fv-tray" });
     this.legend = this.el.createDiv({ cls: "fv-legend" });
     this.sfx = new Sfx(() => host.settings);
     document.addEventListener("pointerup", this.onPointerUp);
 
-    this.engine = new LayoutEngine(host, this.measure);
+    this.engine = new LayoutEngine(host, this.measure, {
+      measured: (note, pages) => this.onMeasured(note, pages),
+      index: () => this.indexData(),
+    });
     this.ro = new ResizeObserver(() => {
       window.clearTimeout(this.resizeTimer);
       this.resizeTimer = window.setTimeout(() => void this.rebuild(), 140);
@@ -215,6 +253,7 @@ export class BookStage {
       return;
     }
     this.notebook = nb;
+    this.tally.reset();
     this.resetClosed();
     this.renderCover();
     this.updateChrome();
@@ -274,6 +313,7 @@ export class BookStage {
       this.book.removeClass("is-busy");
       this.updateChrome();
       this.flushPending();
+      if (this.isOpen) void this.crawl();
     }
   }
 
@@ -328,9 +368,13 @@ export class BookStage {
   }
 
   handleKey(e: KeyboardEvent): boolean {
-    if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return false;
     const t = e.target as HTMLElement | null;
-    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return false;
+    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return false;
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && this.writeTool) {
+      this.undoInk();
+      return true;
+    }
+    if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return false;
     switch (e.key) {
       case "ArrowRight":
       case "PageDown":
@@ -342,6 +386,8 @@ export class BookStage {
         return true;
       case "Escape":
         if (this.laptop.isOpen) this.closeLaptop();
+        else if (this.hlPop.hasClass("is-open")) this.closeHlPop();
+        else if (this.writeTool !== null) this.selectWriteTool(null);
         else if (this.activePen !== null) this.selectPen(null);
         else if (this.toc.hasClass("is-open")) this.toc.removeClass("is-open");
         else if (this.isOpen) void this.close();
@@ -359,6 +405,10 @@ export class BookStage {
     this.el.toggleClass("fv-mode-text", s.viewMode === "text");
     for (const p of ["plain", "lined", "grid", "dotted"]) this.el.toggleClass(`fv-paper-${p}`, s.paperStyle === p);
     this.seg.setAttr("data-mode", s.viewMode);
+    for (const t of ["fine", "none", "rough", "laid", "linen", "speckled"]) this.el.toggleClass(`fv-pt-${t}`, s.pageTexture === t);
+    for (const l of ["classic", "realistic", "wide"]) this.el.toggleClass(`fv-pl-${l}`, s.pageLayout === l);
+    this.el.toggleClass("fv-margins", s.marginNotes);
+    this.el.toggleClass("fv-ribbon-on", s.ribbon);
     const body = handFontInfo(s.handFont);
     const head = s.headingFont === "same" ? body : handFontInfo(s.headingFont);
     this.el.style.setProperty("--fv-heading-font", `"${head.family}", "Segoe Print", "Bradley Hand", cursive`);
@@ -370,7 +420,7 @@ export class BookStage {
       this.el.toggleClass(`fv-bc-${c}`, s.bodyCase === c);
     }
     for (const l of ["plate", "foil", "sticker"]) this.el.toggleClass(`fv-label-${l}`, s.coverLabel === l);
-    this.el.toggleClass("fv-no-band", !s.coverBand);
+    this.applyLook();
     for (const m of ["click", "drag", "nav"]) this.el.toggleClass(`fv-flip-${m}`, s.flipMode === m);
     this.measureSizes();
     this.renderTools();
@@ -387,6 +437,7 @@ export class BookStage {
   destroy(): void {
     this.destroyed = true;
     document.removeEventListener("pointerup", this.onPointerUp);
+    document.removeEventListener("pointerdown", this.onDocPointerDown, true);
     this.laptop.destroy();
     this.ro.disconnect();
     window.clearTimeout(this.resizeTimer);
@@ -421,6 +472,7 @@ export class BookStage {
 
   /** Puts the book back into its resting, closed state without animation. */
   private resetClosed(): void {
+    this.crawlToken++;
     this.setBookState(false);
     this.busy = false;
     this.layout = null;
@@ -456,9 +508,21 @@ export class BookStage {
     ph = Math.max(ph, 180);
     pw = ph * PAGE_RATIO;
     const scale = ph / 660;
-    const pt = ph * 0.085;
-    const pb = ph * 0.1;
+    const pt = ph * (s.pageLayout === "realistic" ? 0.095 : 0.085);
+    const pb = ph * (s.pageLayout === "realistic" ? 0.115 : 0.1);
     const px = pw * 0.11;
+    // gutter side (pin) and outer side (pout) of a page; margin notes widen the outer side
+    const mw = s.marginNotes ? pw * 0.115 : 0;
+    let pin = px;
+    let pout = px;
+    if (s.pageLayout === "realistic") {
+      pin = px * 1.1;
+      pout = px * 0.72;
+    } else if (s.pageLayout === "wide") {
+      pin = px * 1.05;
+      pout = px * 1.3;
+    }
+    pout += mw;
     let fs: number;
     let lh: number;
     if (s.viewMode === "handwritten") {
@@ -475,21 +539,24 @@ export class BookStage {
     st.setProperty("--fv-pt", `${pt}px`);
     st.setProperty("--fv-pb", `${pb}px`);
     st.setProperty("--fv-px", `${px}px`);
-    st.setProperty("--fv-iw", `${pw - px * 2}px`);
+    st.setProperty("--fv-pin", `${pin}px`);
+    st.setProperty("--fv-pout", `${pout}px`);
+    st.setProperty("--fv-mw", `${mw}px`);
+    st.setProperty("--fv-iw", `${pw - pin - pout}px`);
     st.setProperty("--fv-ih", `${ph - pt - pb}px`);
     st.setProperty("--fv-s", String(scale));
     st.setProperty("--fv-fs", `${fs}px`);
     st.setProperty("--fv-lh", `${lh}px`);
     st.setProperty("--fv-shift", `${-pw / 2}px`);
     this.metrics = { pw, ph, shift: -pw / 2 };
+    this.metricsEx = { iw: pw - pin - pout, ih: ph - pt - pb, pin, pout, mw };
     this.placeLegend();
     this.updateLaptopLayout();
   }
 
   private layoutConfig(): LayoutConfig {
     const s = this.host.settings;
-    const iw = this.metrics.pw - this.metrics.pw * 0.11 * 2;
-    const ih = this.metrics.ph - this.metrics.ph * 0.185;
+    const { iw, ih } = this.metricsEx;
     const sig = [
       s.handFont,
       s.handSize,
@@ -504,9 +571,11 @@ export class BookStage {
       s.bodyCase,
       s.highlighters.map((h) => h.color).join(","),
       this.el.style.getPropertyValue("--fv-fs"),
+      s.indexTitle,
     ].join("|");
     const tame = s.paperStyle === "plain" ? 1 : 0.2;
-    return { mode: s.viewMode, w: Math.round(iw), h: Math.round(ih), gap: 48, messiness: s.messiness, tame, signature: sig };
+    const lineVar = s.viewMode === "handwritten" && s.paperStyle === "plain" ? s.lineVariance / 100 : 0;
+    return { mode: s.viewMode, w: Math.round(iw), h: Math.round(ih), gap: 48, messiness: s.messiness, tame, lineVar, margin: s.marginNotes, signature: sig };
   }
 
   private async getLayout(idx: number): Promise<NoteLayout> {
@@ -522,10 +591,19 @@ export class BookStage {
     }
   }
 
+  /** A page element with its folio, running head, margin notes and ink. */
+  private pageFor(layout: NoteLayout, noteIdx: number, index: number, side: "left" | "right"): HTMLElement {
+    const s = this.host.settings;
+    const note = layout.note;
+    const folio = isNote(note) && this.notebook ? this.tally.start(this.notebook.notes, noteIdx).folio + index : undefined;
+    const annots = s.viewMode === "handwritten" ? s.annotations[note.path] : undefined;
+    return layout.pageEl(index, side, { folio, annots, head: isNote(note) ? note.title : undefined });
+  }
+
   private fillBases(): void {
     if (!this.layout) return;
-    this.leftBase.replaceChildren(this.layout.pageEl(this.spread * 2, "left"));
-    this.rightBase.replaceChildren(this.layout.pageEl(this.spread * 2 + 1, "right"));
+    this.leftBase.replaceChildren(this.pageFor(this.layout, this.noteIdx, this.spread * 2, "left"));
+    this.rightBase.replaceChildren(this.pageFor(this.layout, this.noteIdx, this.spread * 2 + 1, "right"));
   }
 
   /** Re-measures and redraws the current spread (resize, mode switch, settings, file edit). */
@@ -585,7 +663,7 @@ export class BookStage {
       }
 
       this.sfx.pageTurn(d);
-      const { leaf, front, back, cast, land, sign } = this.makeLeaf(forward, target, spread);
+      const { leaf, front, back, cast, land, sign } = this.makeLeaf(forward, target, noteIdx, spread);
       await this.animate(
         [
           [leaf, [{ transform: "rotateY(0deg)" }, { transform: `rotateY(${180 * sign}deg)` }], { duration: d, easing: EASE_PAGE }],
@@ -614,7 +692,7 @@ export class BookStage {
   }
 
   /** Builds the turning leaf (faces, shading) and swaps the page underneath, ready to be rotated. */
-  private makeLeaf(forward: boolean, target: NoteLayout, spread: number) {
+  private makeLeaf(forward: boolean, target: NoteLayout, targetIdx: number, spread: number) {
     const cur = this.layout as NoteLayout;
     const curSpread = this.spread;
     const leaf = this.book.createDiv({ cls: `fv-leaf ${forward ? "fv-leaf-next" : "fv-leaf-prev"}` });
@@ -627,17 +705,17 @@ export class BookStage {
     let undo: () => void;
     if (forward) {
       const old = this.rightBase.firstElementChild;
-      this.rightBase.replaceChildren(target.pageEl(spread * 2 + 1, "right"));
-      front.prepend(cur.pageEl(curSpread * 2 + 1, "right"));
-      const landed = target.pageEl(spread * 2, "left");
+      this.rightBase.replaceChildren(this.pageFor(target, targetIdx, spread * 2 + 1, "right"));
+      front.prepend(this.pageFor(cur, this.noteIdx, curSpread * 2 + 1, "right"));
+      const landed = this.pageFor(target, targetIdx, spread * 2, "left");
       back.prepend(landed);
       land = () => this.leftBase.replaceChildren(landed);
       undo = () => old && this.rightBase.replaceChildren(old);
     } else {
       const old = this.leftBase.firstElementChild;
-      this.leftBase.replaceChildren(target.pageEl(spread * 2, "left"));
-      front.prepend(cur.pageEl(curSpread * 2, "left"));
-      const landed = target.pageEl(spread * 2 + 1, "right");
+      this.leftBase.replaceChildren(this.pageFor(target, targetIdx, spread * 2, "left"));
+      front.prepend(this.pageFor(cur, this.noteIdx, curSpread * 2, "left"));
+      const landed = this.pageFor(target, targetIdx, spread * 2 + 1, "right");
       back.prepend(landed);
       land = () => this.rightBase.replaceChildren(landed);
       undo = () => old && this.leftBase.replaceChildren(old);
@@ -691,7 +769,7 @@ export class BookStage {
     try {
       const target = await this.getLayout(tNote);
       const spread = clamp(tSpread, 0, target.spreads - 1);
-      parts = this.makeLeaf(forward, target, spread);
+      parts = this.makeLeaf(forward, target, tNote, spread);
       const p = parts;
       const pw = this.metrics.pw;
       let progress = 0;
@@ -773,7 +851,7 @@ export class BookStage {
     const full = r.width < 700;
     const availH = r.height - 76 - 84 - 10;
     let lw = full ? r.width * 0.94 : Math.min(r.width * 0.5, 880);
-    lw = Math.max(280, Math.min(lw, availH / 0.72));
+    lw = Math.max(280, Math.min(lw, availH / 0.88));
     const space = Math.max(120, r.width - lw * 0.92 - r.width * 0.03 - 12); // the laptop may overlap the book a little
     const bookW = this.isOpen ? this.metrics.pw * 2 : this.metrics.pw;
     const scale = clamp((space - 16) / bookW, 0.4, 1);
@@ -814,6 +892,12 @@ export class BookStage {
       if (hl.dataset.hl) this.removeHighlight(hl.dataset.hl);
       return;
     }
+    const row = target.closest<HTMLElement>(".fv-idx-row, .fv-idx-section");
+    if (row) {
+      e.preventDefault();
+      void this.goTo(Number(row.dataset.idx));
+      return;
+    }
     const a = target.closest("a");
     if (!a) {
       this.maybeFlipOnClick(e, target);
@@ -841,9 +925,9 @@ export class BookStage {
 
   /** "Click a page" mode: the left page goes back, the right page goes forward. */
   private maybeFlipOnClick(e: MouseEvent, target: HTMLElement): void {
-    if (this.host.settings.flipMode !== "click" || !this.isOpen || this.busy || this.activePen !== null) return;
+    if (this.host.settings.flipMode !== "click" || !this.isOpen || this.busy || this.activePen !== null || this.writeTool !== null) return;
     if (e.detail > 1 || window.getSelection()?.isCollapsed === false) return;
-    if (target.closest("input, button, summary, textarea, select, .fv-edge, .fv-sep-tab")) return;
+    if (target.closest("input, button, summary, textarea, select, .fv-edge, .fv-sep-tab, .fv-hl, .fv-ink-edit, .fv-margin-note")) return;
     const r = this.book.getBoundingClientRect();
     void (e.clientX < r.left + r.width / 2 ? this.prev() : this.next());
   }
@@ -874,10 +958,8 @@ export class BookStage {
     const len = nb.name.length;
     this.plateTitle.setAttr("data-size", len <= 9 ? "l" : len <= 16 ? "m" : len <= 26 ? "s" : "xs");
     this.plateCount.setText(this.countLabel());
-    const seed = this.seedFor(nb);
-    const ov = this.host.settings.coverOverrides[nb.id];
-    const style = ov?.style ?? this.host.settings.coverStyle;
-    const color = ov?.color ?? this.host.settings.coverColor;
+    this.applyLook();
+    const { seed, style, color } = resolveLook(this.host.settings, nb);
     const key = `${nb.id}|${seed}|${style}|${color}`;
     if (key === this.coverKey) return;
     this.coverKey = key;
@@ -902,6 +984,64 @@ export class BookStage {
     }, 16);
   }
 
+  /** Per-notebook physical appearance: paper colour, elastic band, ribbon and spine design. */
+  private applyLook(): void {
+    const s = this.host.settings;
+    const look = this.notebook ? resolveLook(s, this.notebook) : null;
+    const paper = look?.paper ?? s.paperColor;
+    for (const p of ["cream", "white", "ivory", "yellow", "grey", "blue", "sepia", "custom"]) this.el.toggleClass(`fv-pc-${p}`, paper === p);
+    this.el.style.setProperty("--fv-paper-custom", s.paperCustom);
+    const band = look?.band ?? s.bandStyle;
+    for (const b of ["none", "vertical", "horizontal", "double"]) this.el.toggleClass(`fv-band-${b}`, band === b);
+    const bandColor = look?.bandColor ?? s.bandColor;
+    bandColor ? this.el.style.setProperty("--fv-band", bandColor) : this.el.style.removeProperty("--fv-band");
+    this.el.style.setProperty("--fv-ribbon", look?.ribbonColor || s.ribbonColor);
+    const spine = look?.spine ?? s.spineStyle;
+    for (const sp of ["plain", "banded", "striped", "foil", "label", "ribbed"]) this.el.toggleClass(`fv-spine-${sp}`, spine === sp);
+  }
+
+  /* --------------------------------------------- shelf animation support */
+
+  /** Where the closed notebook sits on the desk, in stage coordinates. */
+  closedCoverRect(): { cx: number; cy: number; w: number; h: number } {
+    const r = this.el.getBoundingClientRect();
+    return { cx: r.width / 2, cy: 76 + (r.height - 76 - 84) / 2, w: this.metrics.pw, h: this.metrics.ph };
+  }
+
+  /** A finished copy of the closed cover (waits for it to be painted), used as the flying book's front. */
+  async coverClone(): Promise<HTMLElement> {
+    for (let i = 0; i < 60 && this.cover.hasClass("is-generating"); i++) await new Promise((r) => window.setTimeout(r, 25));
+    const c = this.coverFront.cloneNode(true) as HTMLElement;
+    c.removeAttribute("tabindex");
+    c.removeAttribute("role");
+    c.removeAttribute("aria-label");
+    return c;
+  }
+
+  /** Reading progress shown on the cover's name plate. */
+  refreshProgress(): void {
+    const s = this.host.settings;
+    const nb = this.notebook;
+    this.plateProg.empty();
+    if (!nb || !s.trackProgress || !s.progressCover) return;
+    const p = notebookProgress(nb, s);
+    if (p.total) this.plateProg.appendChild(progressEl(p, s.progressStyle, 22));
+  }
+
+  refreshBookmarks(): void {
+    this.updateChrome();
+    this.cb.bookmarksChanged();
+    this.scheduleIndexRefresh();
+  }
+
+  setCoverHidden(hidden: boolean): void {
+    this.el.toggleClass("fv-cover-hidden", hidden);
+  }
+
+  playSfx(kind: "pull" | "land"): void {
+    this.sfx.shelf(kind);
+  }
+
   /* ------------------------------------------------------------------ chrome */
 
   private updateChrome(): void {
@@ -916,7 +1056,7 @@ export class BookStage {
     this.seg.setAttr("data-mode", this.host.settings.viewMode);
 
     const note = this.currentNote();
-    const sep = isSeparator(note);
+    const sep = isSeparator(note) || isIndex(note);
     this.btnCover.toggleClass("is-hidden", open || !nb);
     this.btnOpenNote.toggleClass("is-hidden", sep);
     this.lastEdit.toggleClass("is-visible", open && !!note && !sep && this.host.settings.showLastEdited);
@@ -933,8 +1073,141 @@ export class BookStage {
       this.btnPrev.setAttr("aria-label", this.noteIdx === 0 && this.spread === 0 ? "Close notebook" : "Previous page");
     }
     this.cover.toggleClass("is-empty", !nb || nb.notes.length === 0);
+    this.btnBookmark.toggleClass("is-hidden", !open || isIndex(note));
+    this.btnBookmark.toggleClass("is-on", this.isBookmarked());
+    this.btnBookmark.setAttr("aria-label", this.isBookmarked() ? "Remove bookmark" : "Bookmark this page");
+    this.ribbonEl.toggleClass("has-marks", this.bookmarksOf().length > 0);
+    this.ribbonEl.toggleClass("is-here", this.isBookmarked());
+    if (open && this.layout && !this.busy && note) {
+      const key = `${nb?.id}|${this.noteIdx}|${this.spread}`;
+      if (key !== this.shownKey) {
+        this.shownKey = key;
+        if (isNote(note)) this.cb.noteVisited(note, this.spread, this.layout.spreads);
+        this.refreshFolios();
+      }
+    } else if (!open) this.shownKey = "";
     this.updateLaptopLayout();
     this.cb.stateChanged();
+  }
+
+  /* -------------------------------------------- page tally, index and crawl */
+
+  private onMeasured(note: NoteRef, pages: number): void {
+    const before = this.tally.version;
+    this.tally.set(note, pages);
+    if (this.tally.version !== before) this.scheduleIndexRefresh();
+  }
+
+  /** What the index page needs to draw itself. */
+  private indexData(): IndexData | null {
+    const nb = this.notebook;
+    if (!nb) return null;
+    const s = this.host.settings;
+    const marks = s.bookmarks[nb.id] ?? [];
+    const folios = nb.notes.map((n, i) => (isNote(n) ? this.tally.start(nb.notes, i) : null));
+    const sig = [
+      this.tally.version,
+      nb.notes.map((n) => `${n.path}:${n.mtime}`).join(","),
+      nb.notes.map((n) => noteStatus(s, n.path)).join(""),
+      marks.map((m) => m.path).join(","),
+      s.indexTitle,
+      s.indexPageNumbers,
+      s.indexLastEdited,
+      s.indexCreated,
+      s.indexSections,
+      s.indexStatus,
+      s.indexBookmarks,
+      s.indexLeader,
+      s.indexDates,
+    ].join("|");
+    return { nb, folios, status: (p) => noteStatus(s, p), bookmarked: (p) => marks.some((m) => m.path === p), signature: sig };
+  }
+
+  private scheduleIndexRefresh(): void {
+    window.clearTimeout(this.indexTimer);
+    this.indexTimer = window.setTimeout(() => {
+      this.refreshFolios();
+      if (this.isOpen && isIndex(this.currentNote())) void this.rebuild();
+    }, 450);
+  }
+
+  /** Page numbers printed on the visible pages follow the tally as it firms up. */
+  private refreshFolios(): void {
+    if (!this.isOpen || !this.notebook || !isNote(this.currentNote())) return;
+    const first = this.tally.start(this.notebook.notes, this.noteIdx).folio;
+    this.book.querySelectorAll<HTMLElement>(".fv-pagebase .fv-page-no").forEach((el) => {
+      el.setText(String(first + Number(el.dataset.index ?? 0)));
+    });
+  }
+
+  /** Lays out every note in the background so the index can show exact page numbers. */
+  private async crawl(): Promise<void> {
+    const nb = this.notebook;
+    if (!nb || !this.host.settings.indexPageNumbers) return;
+    const token = ++this.crawlToken;
+    const wait = (ms: number) => new Promise((r) => window.setTimeout(r, ms));
+    for (const note of nb.notes) {
+      if (!isNote(note) || this.tally.has(note.path)) continue;
+      while (this.busy && token === this.crawlToken && !this.destroyed) await wait(250);
+      if (token !== this.crawlToken || this.destroyed || this.notebook !== nb || !this.isOpen) return;
+      try {
+        await this.engine.get(note, this.layoutConfig());
+      } catch {
+        this.tally.set(note, 2);
+      }
+      await wait(60);
+    }
+  }
+
+  /* ------------------------------------------------------------ bookmarks */
+
+  private bookmarksOf(): Bookmark[] {
+    return this.notebook ? this.host.settings.bookmarks[this.notebook.id] ?? [] : [];
+  }
+
+  private isBookmarked(): boolean {
+    const n = this.currentNote();
+    return !!n && this.bookmarksOf().some((b) => b.path === n.path && b.spread === this.spread);
+  }
+
+  toggleBookmark(): void {
+    const nb = this.notebook;
+    const n = this.currentNote();
+    if (!nb || !n || !this.isOpen || isIndex(n)) return;
+    const list = (this.host.settings.bookmarks[nb.id] ??= []);
+    const i = list.findIndex((b) => b.path === n.path && b.spread === this.spread);
+    if (i >= 0) list.splice(i, 1);
+    else list.push({ path: n.path, spread: this.spread, at: Date.now() });
+    this.host.saveSettings();
+    this.sfx.pen(i < 0);
+    this.updateChrome();
+    this.cb.bookmarksChanged();
+    this.scheduleIndexRefresh();
+  }
+
+  /** The ribbon: jumps to the next bookmark after the page you're on (wrapping round). */
+  async followRibbon(): Promise<void> {
+    const nb = this.notebook;
+    const marks = this.bookmarksOf();
+    if (!nb || marks.length === 0) return;
+    const pos = (b: Bookmark) => nb.notes.findIndex((n) => n.path === b.path) * 1000 + b.spread;
+    const here = this.isOpen ? this.noteIdx * 1000 + this.spread : -1;
+    const ordered = [...marks].filter((b) => nb.notes.some((n) => n.path === b.path)).sort((a, b) => pos(a) - pos(b));
+    const next = ordered.find((b) => pos(b) > here) ?? ordered[0];
+    if (!next) return;
+    const idx = nb.notes.findIndex((n) => n.path === next.path);
+    if (!this.isOpen) {
+      await this.open(idx);
+      if (next.spread > 0) await this.turnTo(idx, next.spread);
+    } else await this.turnTo(idx, next.spread);
+  }
+
+  jumpToBookmark(b: Bookmark): void {
+    const nb = this.notebook;
+    const idx = nb ? nb.notes.findIndex((n) => n.path === b.path) : -1;
+    if (idx < 0) return;
+    if (!this.isOpen) void this.open(idx).then(async () => { if (b.spread > 0) await this.turnTo(idx, b.spread); });
+    else void this.turnTo(idx, b.spread);
   }
 
   /* ------------------------------------------------------- outline support */
@@ -1019,6 +1292,7 @@ export class BookStage {
       });
     });
 
+    this.renderWriteTools();
     this.legend.empty();
     const show = s.showLegend && n > 0;
     this.legend.toggleClass("is-hidden", !show);
@@ -1101,9 +1375,345 @@ export class BookStage {
     document.addEventListener("pointerup", up);
   }
 
+  /* ------------------------------------------- writing: pens, pencils, text */
+
+  private renderWriteTools(): void {
+    const s = this.host.settings;
+    const hand = s.viewMode === "handwritten";
+    this.wtray.empty();
+    this.wtray.toggleClass("is-disabled", !hand);
+    const defs: Array<[WriteTool, string]> = [
+      ["pen", "Pen"],
+      ["pencil", "Pencil"],
+      ["marker", "Marker"],
+      ["text", "Type text"],
+      ["eraser", "Eraser"],
+    ];
+    if (this.writeTool && this.writeTool !== "text" && this.writeTool !== "eraser") {
+      const tool = this.writeTool;
+      const palette: Record<string, string[]> = {
+        pen: ["#1d2a6b", "#111111", "#b3202a", "#1b6b3a", "#6b2aa6", "#0a7bb5"],
+        pencil: ["#4b4b55", "#2a2a2a", "#7a5a3a", "#3a5a7a"],
+        marker: ["#ff5fa8", "#ff9f1c", "#2ec4b6", "#3a86ff", "#8338ec", "#ffd60a"],
+      };
+      const fly = this.wtray.createDiv({ cls: "fv-wcolors fv-glass" });
+      for (const c of palette[tool]) {
+        const dot = fly.createEl("button", { cls: "fv-wdot", attr: { type: "button", "aria-label": c } });
+        dot.style.setProperty("--c", c);
+        dot.toggleClass("is-on", s.writeColors[tool] === c);
+        dot.addEventListener("click", (e) => {
+          e.stopPropagation();
+          s.writeColors[tool] = c;
+          this.host.saveSettings();
+          this.renderWriteTools();
+        });
+      }
+    }
+    for (const [tool, label] of defs) {
+      const b = this.wtray.createEl("button", {
+        cls: `fv-pen fv-wpen fv-w-${tool}`,
+        attr: { type: "button", "aria-label": label, title: hand ? label : `${label} (handwritten view only)` },
+      });
+      if (tool === "pen" || tool === "pencil" || tool === "marker") b.style.setProperty("--pen", s.writeColors[tool]);
+      b.toggleClass("is-active", this.writeTool === tool);
+      b.createDiv({ cls: "fv-pen-cap" });
+      b.createDiv({ cls: "fv-pen-body" });
+      b.createDiv({ cls: "fv-pen-tip" });
+      if (tool === "text") b.createSpan({ cls: "fv-wpen-glyph", text: "Aa" });
+      b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.selectWriteTool(tool);
+      });
+    }
+  }
+
+  private selectWriteTool(t: WriteTool | null): void {
+    if (t === this.writeTool) t = null;
+    if (t && this.host.settings.viewMode !== "handwritten") return;
+    this.writeTool = t;
+    if (t) {
+      this.activePen = null;
+      this.el.toggleClass("is-highlighting", false);
+      this.closeHlPop();
+    }
+    this.el.toggleClass("is-writing", t !== null);
+    this.el.setAttr("data-write", t ?? "");
+    this.sfx.pen(t !== null);
+    this.renderTools();
+  }
+
+  private currentAnnots(): Annotation[] {
+    const n = this.currentNote();
+    return n ? (this.host.settings.annotations[n.path] ??= []) : [];
+  }
+
+  private renderVisibleInk(): void {
+    const all = this.currentAnnots();
+    this.book.querySelectorAll<HTMLElement>(".fv-pagebase .fv-page").forEach((p) => renderInk(p, all.filter((a) => a.page === Number(p.dataset.index))));
+  }
+
+  private undoInk(): void {
+    const n = this.currentNote();
+    const list = this.currentAnnots();
+    if (!n || list.length === 0) return;
+    list.pop();
+    if (list.length === 0) delete this.host.settings.annotations[n.path];
+    this.host.saveSettings();
+    this.renderVisibleInk();
+    this.sfx.erase();
+  }
+
+  private commitAnnot(a: Annotation): void {
+    const n = this.currentNote();
+    if (!n) return;
+    (this.host.settings.annotations[n.path] ??= []).push(a);
+    this.host.saveSettings();
+  }
+
+  private onInkDown(e: PointerEvent): void {
+    const tool = this.writeTool;
+    if (!tool || e.button !== 0 || !this.isOpen || this.busy || this.host.settings.viewMode !== "handwritten") return;
+    const pageEl = (e.target as HTMLElement).closest<HTMLElement>(".fv-pagebase .fv-page");
+    const note = this.currentNote();
+    if (!pageEl || !note || isIndex(note)) return;
+    if ((e.target as HTMLElement).closest(".fv-ink-edit")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    const idx = Number(pageEl.dataset.index ?? 0);
+    const rect = pageEl.getBoundingClientRect();
+    const at = (ev: PointerEvent): [number, number] => [clamp((ev.clientX - rect.left) / rect.width, 0, 1), clamp((ev.clientY - rect.top) / rect.height, 0, 1)];
+    if (tool === "text") return this.startText(pageEl, idx, e);
+    if (tool === "eraser") return this.startErase(pageEl, idx, e);
+
+    const color = this.host.settings.writeColors[tool];
+    const points: number[] = [...at(e)];
+    const live = makeStrokeEl({ id: "live", tool, color, points });
+    ensureInkLayer(pageEl).svg.appendChild(live);
+    const move = (ev: PointerEvent) => {
+      const [x, y] = at(ev);
+      const n = points.length;
+      if (Math.hypot((x - points[n - 2]) * rect.width, (y - points[n - 1]) * rect.height) < 1.5) return;
+      points.push(x, y);
+      live.setAttribute("d", strokePath(points));
+    };
+    const up = () => {
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", up);
+      document.removeEventListener("pointercancel", up);
+      live.remove();
+      if (points.length < 2) return;
+      this.commitAnnot({ id: Math.random().toString(36).slice(2, 9), kind: "stroke", page: idx, tool, color, points: points.map((v) => Math.round(v * 10000) / 10000) });
+      this.renderVisibleInk();
+      this.sfx.marker(points.length / 2);
+    };
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+    document.addEventListener("pointercancel", up);
+  }
+
+  private startText(pageEl: HTMLElement, idx: number, e: PointerEvent): void {
+    const note = this.currentNote();
+    if (!note) return;
+    const list = this.currentAnnots();
+    let existing: Annotation | undefined;
+    for (const el of Array.from(pageEl.querySelectorAll<HTMLElement>(".fv-ink-text"))) {
+      const r = el.getBoundingClientRect();
+      if (e.clientX >= r.left - 6 && e.clientX <= r.right + 6 && e.clientY >= r.top - 6 && e.clientY <= r.bottom + 6) {
+        existing = list.find((a) => a.id === el.dataset.ink);
+        el.style.visibility = "hidden";
+        break;
+      }
+    }
+    const rect = pageEl.getBoundingClientRect();
+    const x = existing?.x ?? clamp((e.clientX - rect.left) / rect.width, 0, 0.82);
+    const y = existing?.y ?? clamp((e.clientY - rect.top) / rect.height, 0, 0.95);
+    const color = existing?.color ?? this.host.settings.writeColors.pen;
+    const ed = ensureInkLayer(pageEl).text.createDiv({ cls: "fv-ink-text fv-ink-edit" });
+    ed.contentEditable = "true";
+    ed.style.left = `${x * 100}%`;
+    ed.style.top = `${y * 100}%`;
+    ed.style.setProperty("--c", color);
+    ed.textContent = existing?.text ?? "";
+    let cancelled = false;
+    ed.addEventListener("keydown", (ev) => {
+      ev.stopPropagation();
+      if (ev.key === "Enter" && !ev.shiftKey) {
+        ev.preventDefault();
+        ed.blur();
+      } else if (ev.key === "Escape") {
+        cancelled = true;
+        ed.blur();
+      }
+    });
+    ed.addEventListener("blur", () => {
+      const text = (ed.innerText ?? "").trim();
+      if (existing) {
+        const at = list.indexOf(existing);
+        if (!cancelled) {
+          if (text) existing.text = text;
+          else if (at >= 0) list.splice(at, 1);
+        }
+      } else if (!cancelled && text) {
+        list.push({ id: Math.random().toString(36).slice(2, 9), kind: "text", page: idx, tool: "text", color, x, y, text });
+      }
+      if (list.length === 0) delete this.host.settings.annotations[note.path];
+      this.host.saveSettings();
+      this.renderVisibleInk();
+    });
+    window.setTimeout(() => {
+      ed.focus();
+      const sel = window.getSelection();
+      if (sel) {
+        sel.selectAllChildren(ed);
+        sel.collapseToEnd();
+      }
+    }, 0);
+  }
+
+  private startErase(pageEl: HTMLElement, idx: number, e: PointerEvent): void {
+    const note = this.currentNote();
+    if (!note) return;
+    let removed = false;
+    const hit = (ev: PointerEvent): void => {
+      const list = this.host.settings.annotations[note.path];
+      if (!list) return;
+      const rect = pageEl.getBoundingClientRect();
+      const px = ev.clientX;
+      const py = ev.clientY;
+      const keep = list.filter((a) => {
+        if (a.page !== idx) return true;
+        if (a.kind === "text") {
+          const el = pageEl.querySelector<HTMLElement>(`.fv-ink-text[data-ink="${a.id}"]`);
+          const r = el?.getBoundingClientRect();
+          return !(r && px >= r.left - 6 && px <= r.right + 6 && py >= r.top - 6 && py <= r.bottom + 6);
+        }
+        const pts = a.points ?? [];
+        for (let i = 0; i + 1 < pts.length; i += 2) {
+          const x = rect.left + pts[i] * rect.width;
+          const y = rect.top + pts[i + 1] * rect.height;
+          if (Math.hypot(x - px, y - py) < 13) return false;
+          if (i + 3 < pts.length) {
+            const x2 = rect.left + pts[i + 2] * rect.width;
+            const y2 = rect.top + pts[i + 3] * rect.height;
+            if (Math.hypot((x + x2) / 2 - px, (y + y2) / 2 - py) < 13) return false;
+          }
+        }
+        return true;
+      });
+      if (keep.length !== list.length) {
+        removed = true;
+        if (keep.length) this.host.settings.annotations[note.path] = keep;
+        else delete this.host.settings.annotations[note.path];
+        this.renderVisibleInk();
+      }
+    };
+    hit(e);
+    const move = (ev: PointerEvent) => hit(ev);
+    const up = () => {
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", up);
+      document.removeEventListener("pointercancel", up);
+      if (removed) {
+        this.host.saveSettings();
+        this.sfx.erase();
+      }
+    };
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+    document.addEventListener("pointercancel", up);
+  }
+
+  /* -------------------------------- double-click a highlight: recolour/note/remove */
+
+  private onDocPointerDown = (e: PointerEvent): void => {
+    if (this.hlPop.hasClass("is-open") && !this.hlPop.contains(e.target as Node)) this.closeHlPop();
+  };
+
+  private closeHlPop(): void {
+    this.hlPop.removeClass("is-open");
+  }
+
+  private onDblClick(e: MouseEvent): void {
+    const mark = (e.target as HTMLElement).closest<HTMLElement>(".fv-hl");
+    if (!mark || !mark.dataset.hl || !this.isOpen) return;
+    e.preventDefault();
+    window.getSelection()?.removeAllRanges();
+    this.showHlPop(mark, e);
+  }
+
+  private showHlPop(mark: HTMLElement, e: MouseEvent): void {
+    const note = this.currentNote();
+    const id = mark.dataset.hl as string;
+    const h = note ? this.host.settings.highlights[note.path]?.find((x) => x.id === id) : undefined;
+    if (!note || !h) return;
+    const pens = this.host.settings.highlighters;
+    const pop = this.hlPop;
+    pop.empty();
+    pop.createDiv({ cls: "fv-hlpop-title", text: "Highlight" });
+    const row = pop.createDiv({ cls: "fv-hlpop-row" });
+    pens.forEach((p, i) => {
+      const sw = row.createEl("button", { cls: "fv-hlpop-sw", attr: { type: "button", title: p.label || p.color, "aria-label": p.label || p.color } });
+      sw.style.setProperty("--pen", p.color);
+      sw.toggleClass("is-on", h.slot === i);
+      sw.addEventListener("click", () => {
+        h.slot = i;
+        h.color = p.color;
+        this.host.saveSettings();
+        this.layout?.recolorHighlight(id, p.color);
+        this.book.querySelectorAll<HTMLElement>(`.fv-pagebase .fv-hl[data-hl="${id}"]`).forEach((el) => el.style.setProperty("--hl", p.color));
+        this.sfx.pen(true);
+        this.cb.stateChanged();
+        this.showHlPop(mark, e);
+      });
+    });
+    const input = pop.createEl("input", { cls: "fv-hlpop-note", attr: { type: "text", placeholder: "Margin note…" } });
+    input.value = h.note ?? "";
+    const saveNote = () => this.setHighlightNote(h, mark, input.value.trim());
+    input.addEventListener("keydown", (ev) => {
+      ev.stopPropagation();
+      if (ev.key === "Enter") {
+        saveNote();
+        this.closeHlPop();
+      } else if (ev.key === "Escape") this.closeHlPop();
+    });
+    input.addEventListener("change", saveNote);
+    const del = pop.createEl("button", { cls: "fv-hlpop-del", attr: { type: "button" } });
+    setIcon(del.createSpan(), "trash-2");
+    del.createSpan({ text: "Remove highlight" });
+    del.addEventListener("click", () => {
+      this.closeHlPop();
+      this.removeHighlight(id);
+    });
+    const r = this.el.getBoundingClientRect();
+    pop.style.left = `${clamp(e.clientX - r.left - 100, 8, r.width - 216)}px`;
+    pop.style.top = `${clamp(e.clientY - r.top + 14, 8, r.height - 170)}px`;
+    pop.addClass("is-open");
+  }
+
+  /** Types (or clears) the margin note attached to a highlight. */
+  private setHighlightNote(h: Highlight, mark: HTMLElement, text: string): void {
+    if ((h.note ?? "") === text) return;
+    h.note = text || undefined;
+    this.host.saveSettings();
+    const layout = this.layout;
+    if (!layout) return;
+    const flow = mark.closest<HTMLElement>(".fv-flow");
+    const inner = mark.closest<HTMLElement>(".fv-page-inner");
+    const i = layout.margins.findIndex((m) => m.hlId === h.id);
+    if (i >= 0) layout.margins.splice(i, 1);
+    if (text && flow && inner) {
+      const y = (mark.getClientRects()[0]?.top ?? inner.getBoundingClientRect().top) - inner.getBoundingClientRect().top;
+      layout.margins.push({ page: Number(flow.dataset.page ?? 0), y, text, hlId: h.id });
+    }
+    this.book.querySelectorAll<HTMLElement>(".fv-pagebase .fv-page").forEach((p) => layout.renderMargins(p, Number(p.dataset.index)));
+  }
+
   private selectPen(i: number | null): void {
     const pens = this.host.settings.highlighters;
     if (i === this.activePen) i = null;
+    if (i !== null) this.writeTool = null;
+    this.el.toggleClass("is-writing", this.writeTool !== null);
     this.activePen = i;
     if (i !== null && pens[i]) {
       this.el.style.setProperty("--fv-hl-active", pens[i].color);
@@ -1159,6 +1769,8 @@ export class BookStage {
     this.host.saveSettings();
     this.layout?.removeHighlight(id);
     this.book.querySelectorAll<HTMLElement>(".fv-pagebase .fv-flow").forEach((f) => removeHighlightEls(f, id));
+    const lay = this.layout;
+    if (lay) this.book.querySelectorAll<HTMLElement>(".fv-pagebase .fv-page").forEach((p) => lay.renderMargins(p, Number(p.dataset.index)));
     this.sfx.erase();
     this.cb.stateChanged();
   }

@@ -124,6 +124,17 @@ export class Sfx {
     this.thump(0.01, up ? 520 : 380, 0.07, 0.05);
   }
 
+  /** A book sliding out of a shelf, and settling onto the desk. */
+  shelf(kind: "pull" | "land"): void {
+    if (kind === "pull") {
+      this.burst({ dur: 0.55, type: "bandpass", from: 500, to: 1500, q: 0.8, peak: 0.34, attack: 0.18 });
+      this.thump(0.04, 150, 0.07, 0.08);
+    } else {
+      this.thump(0, 90, 0.3, 0.16);
+      this.burst({ dur: 0.18, type: "lowpass", from: 900, peak: 0.22, attack: 0.01 });
+    }
+  }
+
   /** A soft tick for drag-and-drop reorders. */
   tick(): void {
     this.burst({ dur: 0.04, type: "highpass", from: 2600, peak: 0.18, attack: 0.003 });

@@ -1,5 +1,6 @@
 import { setIcon } from "obsidian";
-import { Highlight, Notebook, isSeparator, realNoteCount } from "../types";
+import { NoteStatus } from "../progress";
+import { Bookmark, Highlight, Notebook, isIndex, isSeparator, realNoteCount } from "../types";
 import { iconButton } from "./dom";
 import { Heading } from "./layout";
 
@@ -12,6 +13,8 @@ export interface OutlineHandlers {
   renameSeparator(index: number): void;
   deleteSeparator(index: number): void;
   removeHighlight(id: string): void;
+  jumpBookmark(b: Bookmark): void;
+  removeBookmark(b: Bookmark): void;
   toggle(): void;
 }
 
@@ -19,6 +22,9 @@ export interface OutlineState {
   current: number;
   headings: Heading[];
   highlights: Array<{ h: Highlight; color: string; page: number | undefined }>;
+  bookmarks: Bookmark[];
+  /** Reading status per note, or null when progress tracking is off. */
+  status: ((path: string) => NoteStatus) | null;
 }
 
 /** Right-hand panel: the notebook's contents. Rows can be dragged to reorder; separators can be added. */
@@ -52,22 +58,34 @@ export class OutlinePanel {
     const notes = realNoteCount(nb);
     this.sub.setText(`${notes} ${notes === 1 ? "note" : "notes"}${nb.notes.length > notes ? ` · ${nb.notes.length - notes} separator${nb.notes.length - notes === 1 ? "" : "s"}` : ""}`);
 
+    const first = isIndex(nb.notes[0]) ? 1 : 0;
     nb.notes.forEach((n, i) => {
       const sep = isSeparator(n);
-      const row = this.list.createDiv({ cls: "fv-ol-row", attr: { draggable: "true" } });
+      const idx = isIndex(n);
+      const row = this.list.createDiv({ cls: "fv-ol-row", attr: idx ? {} : { draggable: "true" } });
       row.toggleClass("is-sep", sep);
+      row.toggleClass("is-index", idx);
       row.toggleClass("is-current", i === st.current);
       setIcon(row.createSpan({ cls: "fv-ol-grip" }), "grip-vertical");
-      setIcon(row.createSpan({ cls: "fv-ol-icon" }), sep ? "bookmark" : "file-text");
+      setIcon(row.createSpan({ cls: "fv-ol-icon" }), idx ? "list" : sep ? "bookmark" : "file-text");
       const label = row.createEl("button", { cls: "fv-ol-label", text: n.title, attr: { type: "button", title: n.title } });
       label.addEventListener("click", () => this.h.open(i));
+      if (st.status && !sep && !idx) {
+        const status = st.status(n.path);
+        if (status === "unread") row.createSpan({ cls: "fv-ol-new", attr: { title: "Not read yet" } });
+      }
+      if (st.bookmarks.some((b) => b.path === n.path)) setIcon(row.createSpan({ cls: "fv-ol-marked", attr: { title: "Bookmarked" } }), "bookmark");
+      if (idx) {
+        if (i === st.current) this.renderDetails(st, i, true);
+        return;
+      }
       const actions = row.createDiv({ cls: "fv-ol-actions" });
       if (sep) {
         iconButton(actions, "pencil", "Rename separator").addEventListener("click", () => this.h.renameSeparator(i));
         iconButton(actions, "trash-2", "Delete separator").addEventListener("click", () => this.h.deleteSeparator(i));
       }
       const up = iconButton(actions, "chevron-up", "Move up");
-      up.disabled = i === 0;
+      up.disabled = i === first;
       up.addEventListener("click", () => this.h.reorder(i, i - 1));
       const down = iconButton(actions, "chevron-down", "Move down");
       down.disabled = i === nb.notes.length - 1;
@@ -96,7 +114,7 @@ export class OutlinePanel {
         if (this.dragFrom < 0) return;
         e.preventDefault();
         const r = row.getBoundingClientRect();
-        const insertAt = e.clientY > r.top + r.height / 2 ? i + 1 : i;
+        const insertAt = Math.max(first, e.clientY > r.top + r.height / 2 ? i + 1 : i);
         const from = this.dragFrom;
         this.dragFrom = -1;
         this.clearDrop();
@@ -108,10 +126,24 @@ export class OutlinePanel {
     });
 
     if (nb.notes.length === 0) this.list.createDiv({ cls: "fv-ol-empty", text: "Nothing here yet." });
+    if (st.bookmarks.length) {
+      const box = this.list.createDiv({ cls: "fv-ol-bookmarks" });
+      box.createDiv({ cls: "fv-ol-subhead", text: "Bookmarks" });
+      for (const b of st.bookmarks) {
+        const idx = nb.notes.findIndex((n) => n.path === b.path);
+        if (idx < 0) continue;
+        const row = box.createDiv({ cls: "fv-ol-hl" });
+        setIcon(row.createSpan({ cls: "fv-ol-marked" }), "bookmark");
+        const btn = row.createEl("button", { cls: "fv-ol-heading", text: `${nb.notes[idx].title} · spread ${b.spread + 1}`, attr: { type: "button" } });
+        btn.addEventListener("click", () => this.h.jumpBookmark(b));
+        iconButton(row, "x", "Remove bookmark").addEventListener("click", () => this.h.removeBookmark(b));
+      }
+    }
     this.list.scrollTop = scroll;
   }
 
-  private renderDetails(st: OutlineState, index: number): void {
+  private renderDetails(st: OutlineState, index: number, indexRow = false): void {
+    if (indexRow) return;
     if (st.headings.length) {
       const box = this.list.createDiv({ cls: "fv-ol-details" });
       const minLevel = Math.min(...st.headings.map((x) => x.level));

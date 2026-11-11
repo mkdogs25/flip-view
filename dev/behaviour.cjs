@@ -31,32 +31,35 @@ const assert = (c, m) => {
   await wait(1700);
   const titles = () => page.$$eval(".fv-ol-row .fv-ol-label", (els) => els.map((e) => e.textContent));
   const before = await titles();
-  await page.hover(".fv-ol-row:nth-child(1)");
-  await page.click(".fv-ol-row:nth-child(1) button[aria-label='Move down']");
+  await page.hover(".fv-ol-row:nth-child(2)");
+  await page.click(".fv-ol-row:nth-child(2) button[aria-label='Move down']");
   await wait(600);
   const after = await titles();
-  assert(after[0] === before[1] && after[1] === before[0], `reorder swaps first two (${before[0]} <-> ${before[1]})`);
+  assert(before[0] === "Contents" && after[0] === "Contents", "the index page stays first");
+  assert(after[1] === before[2] && after[2] === before[1], `reorder swaps first two notes (${before[1]} <-> ${before[2]})`);
   assert((await page.evaluate(() => window.__settings.noteOrder["folder:Physics"])).length === 5, "order persisted");
 
   // add separator after current note
   await page.click(".fv-ol-add");
   await wait(600);
   const withSep = await titles();
-  assert(withSep.length === 6 && withSep.includes("New Chapter"), "separator added");
+  assert(withSep.length === 7 && withSep.includes("New Chapter"), "separator added");
   assert((await page.$$eval(".fv-ol-row.is-sep", (e) => e.length)) === 1, "outline marks the separator row");
 
   // delete it again
   await page.hover(".fv-ol-row.is-sep");
   await page.click(".fv-ol-row.is-sep button[aria-label='Delete separator']");
   await wait(500);
-  assert((await titles()).length === 5, "separator deleted");
+  assert((await titles()).length === 6, "separator deleted");
 
-  // highlight + remove by clicking with the pen active
-  await page.click(".fv-pen:nth-child(2)");
+  // highlight + remove by clicking with the pen active (go to a note page first; the book opens on the index)
+  await page.click(".fv-ol-row:nth-child(2) .fv-ol-label");
+  await wait(1700);
+  await page.click(".fv-tray .fv-pen:nth-child(2)");
   const box = await page.evaluate(() => {
     const ps = Array.from(document.querySelectorAll(".fv-pagebase.fv-left p, .fv-pagebase.fv-left li")).filter((w) => w.textContent && w.textContent.length > 3);
     const r = ps[0].getBoundingClientRect();
-    return { x1: r.left + 3, y: r.top + r.height / 2, x2: r.left + Math.min(r.width - 3, 120) };
+    return { x1: r.left + 3, y: r.top + 9, x2: r.left + Math.min(r.width - 3, 120) };
   });
   await page.mouse.move(box.x1, box.y);
   await page.mouse.down();

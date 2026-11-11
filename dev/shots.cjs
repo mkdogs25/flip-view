@@ -59,7 +59,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
       await wait(1900);
       await page.screenshot({ path: `${out}/20-features-open.png` });
       // pick the first pen, then drag across some words on the left page
-      await page.click(".fv-pen:nth-child(1)");
+      await page.click(".fv-tray .fv-pen:nth-child(1)");
       await wait(500);
       await page.screenshot({ path: `${out}/21-pen-active.png` });
       const box = await page.evaluate(() => {
