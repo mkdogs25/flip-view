@@ -1,16 +1,23 @@
 import { marked } from "marked";
 import { injectFonts } from "../src/render/fonts";
-import { DEFAULT_SETTINGS, FlipViewSettings, Notebook, NotebookHost, NoteRef } from "../src/types";
+import { finishNotebook } from "../src/grouping";
+import { extractMath, restoreMath } from "../src/render/handmath";
+import { FlipViewSettings, Notebook, NotebookHost, NoteRef, freshSettings } from "../src/types";
 import { NotebookApp } from "../src/ui/notebookApp";
 
 const q = new URLSearchParams(location.search);
-const settings: FlipViewSettings = { ...DEFAULT_SETTINGS, coverSeeds: {} };
+const settings: FlipViewSettings = freshSettings();
 if (q.get("mode")) settings.viewMode = q.get("mode") as FlipViewSettings["viewMode"];
 if (q.get("theme")) settings.theme = q.get("theme") as FlipViewSettings["theme"];
 if (q.get("paper")) settings.paperStyle = q.get("paper") as FlipViewSettings["paperStyle"];
 if (q.get("cover")) settings.coverStyle = q.get("cover") as FlipViewSettings["coverStyle"];
 if (q.get("font")) settings.handFont = q.get("font") as FlipViewSettings["handFont"];
 if (q.get("mess")) settings.messiness = Number(q.get("mess"));
+if (q.get("hcase")) settings.headingCase = q.get("hcase") as FlipViewSettings["headingCase"];
+if (q.get("hfont")) settings.headingFont = q.get("hfont") as FlipViewSettings["headingFont"];
+if (q.get("color")) settings.coverColor = "#" + q.get("color");
+if (q.get("label")) settings.coverLabel = q.get("label") as FlipViewSettings["coverLabel"];
+if (q.get("sound") === "0") settings.soundEnabled = false;
 if (q.get("anim")) settings.animation = q.get("anim") as FlipViewSettings["animation"];
 
 const galaxy = `data:image/svg+xml;utf8,${encodeURIComponent(
@@ -38,6 +45,15 @@ const SOURCES: Record<string, string> = {
 - Semiconductors
 - Quantum computing
 - Atomic clocks
+
+Einstein showed that $E = mc^2$ and that the energy of a free particle is $\\sqrt{p^2c^2 + m^2c^4}$.
+
+$$\\frac{\\partial \\psi}{\\partial t} = -\\frac{\\hbar^2}{2m}\\nabla^2 \\psi + V\\psi$$
+
+\`\`\`python
+def energy(m, c=3e8):
+    return m * c ** 2  # joules
+\`\`\`
 
 > Probability is not certain!
 
@@ -78,12 +94,13 @@ function nb(id: string, name: string, folder: string): Notebook {
   const notes: NoteRef[] = Object.keys(SOURCES)
     .filter((k) => k.startsWith(folder + "/"))
     .map((k, i) => ({ path: k + ".md", title: k.split("/")[1], mtime: new Date(2026, 10, 8 - i).getTime(), ctime: 0 }));
-  return { id, name, notes };
+  return { id, name, originalName: name, notes };
 }
 
 const filler = (name: string, n: number): Notebook => ({
   id: "folder:" + name,
   name,
+  originalName: name,
   notes: Array.from({ length: n }, (_, i) => ({ path: `${name}/n${i}.md`, title: `${name} note ${i + 1}`, mtime: Date.now(), ctime: 0 })),
 });
 
@@ -104,13 +121,22 @@ function markdownFor(note: NoteRef): string {
 const host: NotebookHost = {
   settings,
   saveSettings: () => undefined,
-  getNotebooks: () => notebooks,
-  async renderNote(note, el) {
+  getNotebooks: () =>
+    notebooks.map((n) => {
+      const copy: Notebook = { ...n, originalName: n.originalName ?? n.name, notes: n.notes.map((x) => ({ ...x })) };
+      finishNotebook(copy, settings);
+      return copy;
+    }),
+  async renderNote(note, el, opts) {
     const md = markdownFor(note);
-    el.innerHTML = marked.parse(md, { async: false }) as string;
+    const x = opts.hand ? extractMath(md) : { md, items: [] };
+    el.innerHTML = marked.parse(x.md, { async: false }) as string;
     el.querySelectorAll("a").forEach((a) => a.classList.add("internal-link"));
+    restoreMath(el, x.items);
     return () => undefined;
   },
+  promptText: async (o) => (o.value ? o.value + " (renamed)" : "New Chapter"),
+  customiseCover: async () => undefined,
   openNote: () => undefined,
   openLink: () => undefined,
   openExternal: () => undefined,
@@ -122,6 +148,11 @@ const host: NotebookHost = {
 
 injectFonts();
 const app = new NotebookApp(document.getElementById("host") as HTMLElement, host);
-app.setNotebooks(notebooks);
+app.setNotebooks(host.getNotebooks());
 (window as any).__app = app;
 (window as any).__settings = settings;
+if (q.get("seps")) {
+  settings.separators["folder:Physics"] = { s1: "Part Two: Heat" };
+  settings.noteOrder["folder:Physics"] = ["Physics/Quantum Mechanics.md", "sep:s1", "Physics/Thermodynamics.md"];
+  app.setNotebooks(host.getNotebooks());
+}

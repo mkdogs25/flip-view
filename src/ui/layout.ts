@@ -1,5 +1,6 @@
-import { NotebookHost, NoteRef } from "../types";
+import { applyHighlight, highlightColor, removeHighlightEls } from "../render/highlights";
 import { handwrite, prepareForPages } from "../render/handwriting";
+import { NotebookHost, NoteRef, isSeparator } from "../types";
 
 export interface LayoutConfig {
   mode: "handwritten" | "text";
@@ -8,8 +9,16 @@ export interface LayoutConfig {
   h: number;
   gap: number;
   messiness: number;
+  /** 0..1, how much words may drift off the baseline (ruled paper keeps them on the line). */
+  tame: number;
   /** Anything that should invalidate cached layouts when it changes. */
   signature: string;
+}
+
+export interface Heading {
+  text: string;
+  level: number;
+  page: number;
 }
 
 export class NoteLayout {
@@ -19,10 +28,16 @@ export class NoteLayout {
     readonly pageCount: number,
     private step: number,
     private disposeFn: () => void,
+    readonly headings: Heading[],
+    readonly hlPages: Map<string, number>,
   ) {}
 
   get spreads(): number {
     return Math.max(1, Math.ceil(this.pageCount / 2));
+  }
+
+  get separator(): boolean {
+    return isSeparator(this.note);
   }
 
   /** Builds a page element showing column `index` of the flowed note (blank past the end). */
@@ -32,10 +47,25 @@ export class NoteLayout {
     if (index < this.pageCount) {
       const clone = this.flow.cloneNode(true) as HTMLElement;
       clone.style.transform = `translateX(${-index * this.step}px)`;
+      clone.dataset.page = String(index);
       inner.appendChild(clone);
-      page.createDiv({ cls: "fv-page-no", text: String(index + 1) });
+      if (!this.separator) page.createDiv({ cls: "fv-page-no", text: String(index + 1) });
+    }
+    if (this.separator && side === "right") {
+      const tab = page.createDiv({ cls: "fv-sep-tab" });
+      tab.createSpan({ text: this.note.title });
     }
     return page;
+  }
+
+  addHighlight(h: Parameters<typeof applyHighlight>[1], color: string, page: number): void {
+    applyHighlight(this.flow, h, color);
+    this.hlPages.set(h.id, page);
+  }
+
+  removeHighlight(id: string): void {
+    removeHighlightEls(this.flow, id);
+    this.hlPages.delete(id);
   }
 
   dispose(): void {
@@ -70,7 +100,7 @@ export class LayoutEngine {
   constructor(private host: NotebookHost, private measureEl: HTMLElement) {}
 
   get(note: NoteRef, cfg: LayoutConfig): Promise<NoteLayout> {
-    const sig = `${cfg.mode}|${cfg.w}x${cfg.h}|${cfg.gap}|${cfg.messiness}|${cfg.signature}`;
+    const sig = `${cfg.mode}|${cfg.w}x${cfg.h}|${cfg.gap}|${cfg.messiness}|${cfg.tame}|${cfg.signature}`;
     const hit = this.cache.get(note.path);
     if (hit && hit.sig === sig && hit.mtime === note.mtime) {
       // refresh LRU position
@@ -109,9 +139,22 @@ export class LayoutEngine {
     flow.style.columnGap = `${cfg.gap}px`;
     this.measureEl.appendChild(flow);
 
-    const dispose = await this.host.renderNote(note, flow);
-    if (cfg.mode === "handwritten") handwrite(flow, note.path, cfg.messiness / 100);
+    let dispose: () => void = () => undefined;
+    if (isSeparator(note)) {
+      flow.addClass("fv-flow-sep");
+      flow.createDiv({ cls: "fv-sep-spacer" });
+      const sep = flow.createDiv({ cls: "fv-sep" });
+      sep.createEl("h1", { cls: "fv-sep-title", text: note.title });
+      sep.createDiv({ cls: "fv-sep-flourish" });
+    } else {
+      dispose = await this.host.renderNote(note, flow, { hand: cfg.mode === "handwritten" });
+    }
+    if (cfg.mode === "handwritten") handwrite(flow, note.path, cfg.messiness / 100, cfg.tame);
     prepareForPages(flow);
+
+    // saved highlights
+    const s = this.host.settings;
+    for (const h of s.highlights[note.path] ?? []) applyHighlight(flow, h, highlightColor(h, s.highlighters));
 
     try {
       await document.fonts.load(`20px ${getComputedStyle(flow).fontFamily.split(",")[0]}`);
@@ -124,7 +167,22 @@ export class LayoutEngine {
 
     const step = cfg.w + cfg.gap;
     const pages = Math.max(1, Math.round((flow.scrollWidth + cfg.gap) / step));
+    const left = flow.getBoundingClientRect().left;
+    const pageOf = (el: Element): number => {
+      const r = el.getClientRects()[0];
+      return r ? Math.max(0, Math.floor((r.left - left + 2) / step)) : 0;
+    };
+    const headings: Heading[] = Array.from(flow.querySelectorAll("h1, h2, h3, h4, h5, h6")).map((h) => ({
+      text: (h.textContent ?? "").trim(),
+      level: Number(h.tagName[1]),
+      page: pageOf(h),
+    }));
+    const hlPages = new Map<string, number>();
+    flow.querySelectorAll<HTMLElement>(".fv-hl").forEach((el) => {
+      const id = el.dataset.hl;
+      if (id && !hlPages.has(id)) hlPages.set(id, pageOf(el));
+    });
     flow.remove();
-    return new NoteLayout(note, flow, pages, step, dispose);
+    return new NoteLayout(note, flow, pages, step, dispose, headings.filter((h) => h.text), hlPages);
   }
 }

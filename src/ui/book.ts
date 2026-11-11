@@ -1,15 +1,26 @@
 import { setIcon } from "obsidian";
 import { generateCover } from "../render/cover";
 import { handFontInfo } from "../render/fonts";
-import { Notebook, NotebookHost, ViewMode } from "../types";
+import { applyHighlight, highlightColor, removeHighlightEls, textOffsetOf } from "../render/highlights";
+import { Sfx } from "../render/sound";
+import { Highlight, Notebook, NotebookHost, ViewMode, isSeparator, realNoteCount } from "../types";
 import { clamp, hashString } from "../util/rng";
 import { formatDate, iconButton } from "./dom";
-import { LayoutConfig, LayoutEngine, NoteLayout } from "./layout";
+import { Heading, LayoutConfig, LayoutEngine, NoteLayout } from "./layout";
 
 export interface StageCallbacks {
   toggleSidebar(): void;
+  toggleOutline(): void;
   toggleFocus(): void;
   modeChanged(mode: ViewMode): void;
+  customiseCover(nb: Notebook): void;
+  /** Open/closed state, current note or page changed. */
+  stateChanged(): void;
+}
+
+function penCursor(color: string): string {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'><path d='M3 25 L6 18 L18 4 L24 10 L10 22 Z' fill='${color}' stroke='#333' stroke-width='1.5' stroke-linejoin='round'/><path d='M3 25 L6 18 L9 21 Z' fill='#333'/></svg>`;
+  return `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}") 3 25, text`;
 }
 
 const PAGE_RATIO = 0.75; // width / height of one page
@@ -37,6 +48,13 @@ export class BookStage {
   private seg: HTMLElement;
   private btnClose: HTMLButtonElement;
   private btnShuffle: HTMLButtonElement;
+  private btnCover: HTMLButtonElement;
+  private btnOpenNote: HTMLButtonElement;
+  private tray: HTMLElement;
+  private legend: HTMLElement;
+  private sfx: Sfx;
+  private activePen: number | null = null;
+  private baselineKey = "";
   private footer: HTMLElement;
   private footerOpen: HTMLElement;
   private footTitle: HTMLButtonElement;
@@ -83,7 +101,10 @@ export class BookStage {
     const right = this.toolbar.createDiv({ cls: "fv-toolbar-side fv-toolbar-right" });
     this.btnShuffle = iconButton(right, "dices", "Shuffle cover design", "fv-glass");
     this.btnShuffle.addEventListener("click", () => this.shuffleCover());
+    this.btnCover = iconButton(right, "palette", "Cover options", "fv-glass");
+    this.btnCover.addEventListener("click", () => this.notebook && this.cb.customiseCover(this.notebook));
     iconButton(right, "maximize", "Full screen", "fv-glass").addEventListener("click", () => this.cb.toggleFocus());
+    iconButton(right, "panel-right", "Toggle outline", "fv-glass").addEventListener("click", () => this.cb.toggleOutline());
     this.btnClose = iconButton(right, "x", "Close notebook", "fv-glass");
     this.btnClose.addEventListener("click", () => void this.close());
 
@@ -138,7 +159,8 @@ export class BookStage {
     this.footCount = this.footerOpen.createSpan({ cls: "fv-foot-count" });
     this.btnNext = iconButton(this.footerOpen, "chevron-right", "Next page");
     this.btnNext.addEventListener("click", () => void this.next());
-    iconButton(this.footerOpen, "file-text", "Open this note").addEventListener("click", (e) => {
+    this.btnOpenNote = iconButton(this.footerOpen, "file-text", "Open this note");
+    this.btnOpenNote.addEventListener("click", (e) => {
       const n = this.currentNote();
       if (n) this.host.openNote(n.path, e.ctrlKey || e.metaKey);
     });
@@ -148,6 +170,11 @@ export class BookStage {
       this.toggleToc();
     });
     this.el.addEventListener("click", () => this.toc.removeClass("is-open"));
+
+    this.tray = this.el.createDiv({ cls: "fv-tray" });
+    this.legend = this.el.createDiv({ cls: "fv-legend" });
+    this.sfx = new Sfx(() => host.settings);
+    document.addEventListener("pointerup", this.onPointerUp);
 
     this.engine = new LayoutEngine(host, this.measure);
     this.ro = new ResizeObserver(() => {
@@ -214,6 +241,7 @@ export class BookStage {
       const d = this.dur(1250);
       const { shift } = this.metrics;
       if (d > 0) {
+        this.sfx.coverOpen(d);
         window.setTimeout(() => this.setBookState(true), d * 0.5);
         await this.animate(
           [
@@ -246,6 +274,7 @@ export class BookStage {
     const d = instant ? 0 : this.dur(1100);
     const { shift } = this.metrics;
     if (d > 0) {
+      this.sfx.coverClose(d);
       this.book.addClass("is-closing");
       this.setBookState(false);
       await this.animate(
@@ -301,7 +330,8 @@ export class BookStage {
         void this.prev();
         return true;
       case "Escape":
-        if (this.toc.hasClass("is-open")) this.toc.removeClass("is-open");
+        if (this.activePen !== null) this.selectPen(null);
+        else if (this.toc.hasClass("is-open")) this.toc.removeClass("is-open");
         else if (this.isOpen) void this.close();
         else return false;
         return true;
@@ -317,7 +347,18 @@ export class BookStage {
     this.el.toggleClass("fv-mode-text", s.viewMode === "text");
     for (const p of ["plain", "lined", "grid", "dotted"]) this.el.toggleClass(`fv-paper-${p}`, s.paperStyle === p);
     this.seg.setAttr("data-mode", s.viewMode);
+    const body = handFontInfo(s.handFont);
+    const head = s.headingFont === "same" ? body : handFontInfo(s.headingFont);
+    this.el.style.setProperty("--fv-heading-font", `"${head.family}", "Segoe Print", "Bradley Hand", cursive`);
+    this.el.style.setProperty("--fv-hscale", String(head.size / body.size));
+    for (const c of ["smallcaps", "normal", "uppercase"]) {
+      this.el.toggleClass(`fv-hc-${c}`, s.headingCase === c);
+      this.el.toggleClass(`fv-bc-${c}`, s.bodyCase === c);
+    }
+    for (const l of ["plate", "foil", "sticker"]) this.el.toggleClass(`fv-label-${l}`, s.coverLabel === l);
+    this.el.toggleClass("fv-no-band", !s.coverBand);
     this.measureSizes();
+    this.renderTools();
     if (this.notebook) this.renderCover();
     if (rebuild) void this.rebuild();
     this.updateChrome();
@@ -330,6 +371,7 @@ export class BookStage {
 
   destroy(): void {
     this.destroyed = true;
+    document.removeEventListener("pointerup", this.onPointerUp);
     this.ro.disconnect();
     window.clearTimeout(this.resizeTimer);
     this.engine.invalidate();
@@ -424,6 +466,7 @@ export class BookStage {
     st.setProperty("--fv-lh", `${lh}px`);
     st.setProperty("--fv-shift", `${-pw / 2}px`);
     this.metrics = { pw, ph, shift: -pw / 2 };
+    this.placeLegend();
   }
 
   private layoutConfig(): LayoutConfig {
@@ -439,9 +482,14 @@ export class BookStage {
       s.showNoteTitle,
       s.inkColor,
       s.accentColor,
+      s.headingFont,
+      s.headingCase,
+      s.bodyCase,
+      s.highlighters.map((h) => h.color).join(","),
       this.el.style.getPropertyValue("--fv-fs"),
     ].join("|");
-    return { mode: s.viewMode, w: Math.round(iw), h: Math.round(ih), gap: 48, messiness: s.messiness, signature: sig };
+    const tame = s.paperStyle === "plain" ? 1 : 0.2;
+    return { mode: s.viewMode, w: Math.round(iw), h: Math.round(ih), gap: 48, messiness: s.messiness, tame, signature: sig };
   }
 
   private async getLayout(idx: number): Promise<NoteLayout> {
@@ -449,6 +497,7 @@ export class BookStage {
     if (!note) throw new Error("note index out of range");
     const timer = window.setTimeout(() => this.spinner.addClass("is-visible"), 220);
     try {
+      await this.ensureBaseline();
       return await this.engine.get(note, this.layoutConfig());
     } finally {
       window.clearTimeout(timer);
@@ -518,6 +567,7 @@ export class BookStage {
         return;
       }
 
+      this.sfx.pageTurn(d);
       const leaf = this.book.createDiv({ cls: `fv-leaf ${forward ? "fv-leaf-next" : "fv-leaf-prev"}` });
       const front = leaf.createDiv({ cls: "fv-leaf-face fv-face-front" });
       const back = leaf.createDiv({ cls: "fv-leaf-face fv-face-back" });
@@ -566,6 +616,12 @@ export class BookStage {
   }
 
   private onPageClick(e: MouseEvent): void {
+    const hl = (e.target as HTMLElement).closest<HTMLElement>(".fv-hl");
+    if (hl && this.activePen !== null && window.getSelection()?.isCollapsed !== false) {
+      e.preventDefault();
+      if (hl.dataset.hl) this.removeHighlight(hl.dataset.hl);
+      return;
+    }
     const a = (e.target as HTMLElement).closest("a");
     if (!a) return;
     e.preventDefault();
@@ -580,7 +636,7 @@ export class BookStage {
   }
 
   private countLabel(): string {
-    const n = this.notebook?.notes.length ?? 0;
+    const n = this.notebook ? realNoteCount(this.notebook) : 0;
     return `${n} ${n === 1 ? "note" : "notes"}`;
   }
 
@@ -606,7 +662,10 @@ export class BookStage {
     this.plateTitle.setAttr("data-size", len <= 9 ? "l" : len <= 16 ? "m" : len <= 26 ? "s" : "xs");
     this.plateCount.setText(this.countLabel());
     const seed = this.seedFor(nb);
-    const key = `${nb.id}|${seed}|${this.host.settings.coverStyle}`;
+    const ov = this.host.settings.coverOverrides[nb.id];
+    const style = ov?.style ?? this.host.settings.coverStyle;
+    const color = ov?.color ?? this.host.settings.coverColor;
+    const key = `${nb.id}|${seed}|${style}|${color}`;
     if (key === this.coverKey) return;
     this.coverKey = key;
     const token = ++this.coverToken;
@@ -614,7 +673,7 @@ export class BookStage {
     window.setTimeout(() => {
       if (token !== this.coverToken || this.destroyed) return;
       try {
-        const res = generateCover(seed, this.host.settings.coverStyle);
+        const res = generateCover(seed, style, color);
         this.coverFront.style.backgroundImage = `url(${res.url})`;
         this.coverFront.style.setProperty("--fv-cover-base", res.base);
         this.coverFront.style.setProperty("--fv-cover-dark", res.dark);
@@ -644,7 +703,10 @@ export class BookStage {
     this.seg.setAttr("data-mode", this.host.settings.viewMode);
 
     const note = this.currentNote();
-    this.lastEdit.toggleClass("is-visible", open && !!note && this.host.settings.showLastEdited);
+    const sep = isSeparator(note);
+    this.btnCover.toggleClass("is-hidden", open || !nb);
+    this.btnOpenNote.toggleClass("is-hidden", sep);
+    this.lastEdit.toggleClass("is-visible", open && !!note && !sep && this.host.settings.showLastEdited);
     if (note) {
       this.lastEditText.empty();
       this.lastEditText.createDiv({ text: "Last edited:" });
@@ -658,6 +720,215 @@ export class BookStage {
       this.btnPrev.setAttr("aria-label", this.noteIdx === 0 && this.spread === 0 ? "Close notebook" : "Previous page");
     }
     this.cover.toggleClass("is-empty", !nb || nb.notes.length === 0);
+    this.cb.stateChanged();
+  }
+
+  /* ------------------------------------------------------- outline support */
+
+  isBookOpen(): boolean {
+    return this.isOpen;
+  }
+
+  currentIndex(): number {
+    return this.isOpen ? this.noteIdx : -1;
+  }
+
+  currentHeadings(): Heading[] {
+    return this.isOpen && this.layout ? this.layout.headings : [];
+  }
+
+  /** Highlights on the open note, with the page each one is on when known. */
+  currentHighlights(): Array<{ h: Highlight; color: string; page: number | undefined }> {
+    const note = this.currentNote();
+    if (!this.isOpen || !note || isSeparator(note)) return [];
+    const s = this.host.settings;
+    return (s.highlights[note.path] ?? []).map((h) => ({ h, color: highlightColor(h, s.highlighters), page: this.layout?.hlPages.get(h.id) }));
+  }
+
+  async jumpToPage(noteIdx: number, page: number): Promise<void> {
+    if (!this.notebook) return;
+    const spread = Math.floor(page / 2);
+    if (!this.isOpen) {
+      await this.open(noteIdx);
+      if (spread > 0) await this.turnTo(noteIdx, spread);
+    } else {
+      await this.turnTo(noteIdx, spread);
+    }
+  }
+
+  /* ---------------------------------------------- baseline of ruled paper */
+
+  /** Measures where the handwriting font's baseline sits inside a ruled line so the rules can run under the words. */
+  private async ensureBaseline(): Promise<void> {
+    const s = this.host.settings;
+    if (s.viewMode !== "handwritten") return;
+    const fam = handFontInfo(s.handFont).family;
+    const key = `${fam}|${this.el.style.getPropertyValue("--fv-fs")}|${this.el.style.getPropertyValue("--fv-lh")}`;
+    if (key === this.baselineKey) return;
+    try {
+      await document.fonts.load(`20px "${fam}"`);
+    } catch {
+      /* ignore */
+    }
+    const probe = this.measure.createDiv({ cls: "fv-flow" });
+    probe.style.cssText = "width:300px;height:auto;column-width:auto;position:absolute;left:0;top:0";
+    const line = probe.createDiv();
+    line.setText("Hxg");
+    const mark = line.createSpan();
+    mark.style.cssText = "display:inline-block;width:1px;height:0;vertical-align:baseline";
+    const base = mark.getBoundingClientRect().top - line.getBoundingClientRect().top;
+    probe.remove();
+    const lh = parseFloat(this.el.style.getPropertyValue("--fv-lh")) || 30;
+    if (base > 0 && base < lh * 1.4) this.el.style.setProperty("--fv-base", `${base}px`);
+    this.baselineKey = key;
+  }
+
+  /* ------------------------------------------------ highlighter & legend */
+
+  private renderTools(): void {
+    const s = this.host.settings;
+    const n = s.highlighters.length;
+    if (this.activePen !== null && this.activePen >= n) this.activePen = null;
+    this.el.toggleClass("is-highlighting", this.activePen !== null);
+    this.tray.empty();
+    s.highlighters.forEach((p, i) => {
+      const pen = this.tray.createEl("button", { cls: "fv-pen", attr: { type: "button", "aria-label": `Highlighter: ${p.label || p.color}`, title: p.label || p.color } });
+      pen.style.setProperty("--pen", p.color);
+      pen.style.setProperty("--r", `${(i - (n - 1) / 2) * 4}deg`);
+      pen.toggleClass("is-active", i === this.activePen);
+      pen.createDiv({ cls: "fv-pen-cap" });
+      pen.createDiv({ cls: "fv-pen-body" });
+      pen.createDiv({ cls: "fv-pen-tip" });
+      pen.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.selectPen(i);
+      });
+    });
+
+    this.legend.empty();
+    const show = s.showLegend && n > 0;
+    this.legend.toggleClass("is-hidden", !show);
+    if (!show) return;
+    const grip = this.legend.createDiv({ cls: "fv-legend-title", text: "Legend" });
+    grip.addEventListener("pointerdown", (e) => this.dragLegend(e));
+    s.highlighters.forEach((p, i) => {
+      const row = this.legend.createEl("button", { cls: "fv-legend-row", attr: { type: "button" } });
+      row.toggleClass("is-active", i === this.activePen);
+      row.createSpan({ cls: "fv-legend-swatch" }).style.setProperty("--pen", p.color);
+      row.createSpan({ cls: "fv-legend-label", text: p.label || p.color });
+      row.addEventListener("click", () => this.selectPen(i));
+    });
+    this.placeLegend();
+  }
+
+  private placeLegend(): void {
+    const pos = this.host.settings.legendPos;
+    const r = this.el.getBoundingClientRect();
+    if (pos && r.width > 0) {
+      const x = clamp(pos.x * r.width, 0, Math.max(0, r.width - 150));
+      const y = clamp(pos.y * r.height, 0, Math.max(0, r.height - 90));
+      this.legend.style.left = `${x}px`;
+      this.legend.style.top = `${y}px`;
+      this.legend.style.bottom = "auto";
+    } else {
+      this.legend.style.removeProperty("left");
+      this.legend.style.removeProperty("top");
+      this.legend.style.removeProperty("bottom");
+    }
+  }
+
+  private dragLegend(e: PointerEvent): void {
+    e.preventDefault();
+    const stage = this.el.getBoundingClientRect();
+    const box = this.legend.getBoundingClientRect();
+    const dx = e.clientX - box.left;
+    const dy = e.clientY - box.top;
+    this.legend.addClass("is-dragging");
+    const move = (ev: PointerEvent) => {
+      const x = clamp(ev.clientX - dx - stage.left, 0, stage.width - box.width);
+      const y = clamp(ev.clientY - dy - stage.top, 0, stage.height - box.height);
+      this.legend.style.left = `${x}px`;
+      this.legend.style.top = `${y}px`;
+      this.legend.style.bottom = "auto";
+    };
+    const up = () => {
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", up);
+      this.legend.removeClass("is-dragging");
+      this.host.settings.legendPos = {
+        x: (parseFloat(this.legend.style.left) || 0) / stage.width,
+        y: (parseFloat(this.legend.style.top) || 0) / stage.height,
+      };
+      this.host.saveSettings();
+    };
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+  }
+
+  private selectPen(i: number | null): void {
+    const pens = this.host.settings.highlighters;
+    if (i === this.activePen) i = null;
+    this.activePen = i;
+    if (i !== null && pens[i]) {
+      this.el.style.setProperty("--fv-hl-active", pens[i].color);
+      this.el.style.setProperty("--fv-pen-cursor", penCursor(pens[i].color));
+    }
+    this.sfx.pen(i !== null);
+    this.renderTools();
+  }
+
+  private onPointerUp = (): void => {
+    if (this.activePen === null || !this.isOpen || this.busy) return;
+    window.setTimeout(() => this.commitSelection(), 0);
+  };
+
+  /** Turns the text the user just dragged over into a saved highlight in the active pen's colour. */
+  private commitSelection(): void {
+    const slot = this.activePen;
+    const sel = window.getSelection();
+    const note = this.currentNote();
+    if (slot === null || !sel || sel.isCollapsed || sel.rangeCount === 0 || !note || !this.layout || this.layout.separator) return;
+    const range = sel.getRangeAt(0);
+    const anc = range.commonAncestorContainer;
+    const host = anc instanceof Element ? anc : anc.parentElement;
+    const flow = host?.closest<HTMLElement>(".fv-flow");
+    if (!flow || !this.book.contains(flow) || flow.closest(".fv-leaf")) return;
+    const text = flow.textContent ?? "";
+    let start = textOffsetOf(flow, range.startContainer, range.startOffset);
+    let end = textOffsetOf(flow, range.endContainer, range.endOffset);
+    while (start < end && /\s/.test(text[start])) start++;
+    while (end > start && /\s/.test(text[end - 1])) end--;
+    if (end <= start) return;
+    sel.removeAllRanges();
+    const pen = this.host.settings.highlighters[slot];
+    if (!pen) return;
+    const h: Highlight = { id: Math.random().toString(36).slice(2, 10), start, end, quote: text.slice(start, end), slot, color: pen.color };
+    (this.host.settings.highlights[note.path] ??= []).push(h);
+    this.host.saveSettings();
+    this.layout.addHighlight(h, pen.color, Number(flow.dataset.page ?? 0));
+    this.book.querySelectorAll<HTMLElement>(".fv-pagebase .fv-flow").forEach((f) => applyHighlight(f, h, pen.color));
+    this.sfx.marker(h.quote.length);
+    this.cb.stateChanged();
+  }
+
+  removeHighlight(id: string): void {
+    const note = this.currentNote();
+    if (!note) return;
+    const list = this.host.settings.highlights[note.path];
+    if (list) {
+      const next = list.filter((h) => h.id !== id);
+      if (next.length) this.host.settings.highlights[note.path] = next;
+      else delete this.host.settings.highlights[note.path];
+    }
+    this.host.saveSettings();
+    this.layout?.removeHighlight(id);
+    this.book.querySelectorAll<HTMLElement>(".fv-pagebase .fv-flow").forEach((f) => removeHighlightEls(f, id));
+    this.sfx.erase();
+    this.cb.stateChanged();
+  }
+
+  tick(): void {
+    this.sfx.tick();
   }
 
   private toggleToc(): void {

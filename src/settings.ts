@@ -1,7 +1,8 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import type FlipViewPlugin from "./main";
 import { HAND_FONTS } from "./render/fonts";
-import { CoverStyle, FlipViewSettings, PaperStyle } from "./types";
+import { COVER_STYLE_OPTIONS } from "./modals";
+import { CoverLabel, CoverStyle, FlipViewSettings, HandFont, PaperStyle, TextCase } from "./types";
 
 export class FlipViewSettingTab extends PluginSettingTab {
   constructor(app: App, private plugin: FlipViewPlugin) {
@@ -105,18 +106,11 @@ export class FlipViewSettingTab extends PluginSettingTab {
       .addToggle((t) => t.setValue(s.showDesk).onChange((v) => ((s.showDesk = v), save())));
     new Setting(containerEl)
       .setName("Cover design")
-      .setDesc("Covers are generated randomly from each notebook's name, with no AI. Pick one style or let each notebook get its own. Use the dice button on a closed notebook to reroll it.")
-      .addDropdown((d) =>
-        d
-          .addOption("random", "Random per notebook")
-          .addOption("cosmic", "Cosmic")
-          .addOption("leather", "Leather")
-          .addOption("linen", "Linen")
-          .addOption("marble", "Marble")
-          .addOption("geometric", "Geometric")
-          .setValue(s.coverStyle)
-          .onChange((v) => ((s.coverStyle = v as CoverStyle), save())),
-      )
+      .setDesc("Covers are generated randomly from each notebook's name, with no AI. Pick one style or let each notebook get its own. You can also change a single notebook's cover with the palette button on its closed cover.")
+      .addDropdown((d) => {
+        COVER_STYLE_OPTIONS.forEach(([v, l]) => d.addOption(v, v === "random" ? "Random per notebook" : l));
+        d.setValue(s.coverStyle).onChange((v) => ((s.coverStyle = v as CoverStyle), save()));
+      })
       .addExtraButton((b) =>
         b
           .setIcon("dices")
@@ -127,6 +121,25 @@ export class FlipViewSettingTab extends PluginSettingTab {
             save();
           }),
       );
+    new Setting(containerEl)
+      .setName("Cover colour")
+      .setDesc("Tints every cover. Reset to let each notebook pick its own colours.")
+      .addColorPicker((c) => c.setValue(s.coverColor || "#7c5cbf").onChange((v) => ((s.coverColor = v), save())))
+      .addExtraButton((b) => b.setIcon("rotate-ccw").setTooltip("Reset").onClick(() => ((s.coverColor = ""), save(), this.display())));
+    new Setting(containerEl)
+      .setName("Cover label")
+      .addDropdown((d) =>
+        d
+          .addOption("plate", "Cream name plate")
+          .addOption("foil", "Gold foil lettering")
+          .addOption("sticker", "Paper sticker")
+          .setValue(s.coverLabel)
+          .onChange((v) => ((s.coverLabel = v as CoverLabel), save())),
+      );
+    new Setting(containerEl)
+      .setName("Elastic band")
+      .setDesc("The strap on the right of the cover.")
+      .addToggle((t) => t.setValue(s.coverBand).onChange((v) => ((s.coverBand = v), save())));
     new Setting(containerEl)
       .setName("Paper")
       .setDesc("Page style for handwritten view.")
@@ -166,10 +179,28 @@ export class FlipViewSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Handwriting")
+      .setDesc("Includes joined-up cursive options. Maths and code are written out in the same hand.")
       .addDropdown((d) => {
         HAND_FONTS.forEach((f) => d.addOption(f.id, f.label));
-        d.setValue(s.handFont).onChange((v) => ((s.handFont = v as FlipViewSettings["handFont"]), save()));
+        d.setValue(s.handFont).onChange((v) => ((s.handFont = v as HandFont), save()));
       });
+    new Setting(containerEl)
+      .setName("Heading handwriting")
+      .setDesc("Headings can use a different hand from the body text.")
+      .addDropdown((d) => {
+        d.addOption("same", "Same as body");
+        HAND_FONTS.forEach((f) => d.addOption(f.id, f.label));
+        d.setValue(s.headingFont).onChange((v) => ((s.headingFont = v as HandFont | "same"), save()));
+      });
+    const caseOptions = (d: import("obsidian").DropdownComponent) =>
+      d.addOption("smallcaps", "Small caps").addOption("normal", "Normal").addOption("uppercase", "UPPERCASE");
+    new Setting(containerEl)
+      .setName("Heading case")
+      .setDesc("Small caps by default.")
+      .addDropdown((d) => caseOptions(d).setValue(s.headingCase).onChange((v) => ((s.headingCase = v as TextCase), save())));
+    new Setting(containerEl)
+      .setName("Body text case")
+      .addDropdown((d) => caseOptions(d).setValue(s.bodyCase).onChange((v) => ((s.bodyCase = v as TextCase), save())));
     new Setting(containerEl)
       .setName("Handwriting size")
       .addSlider((sl) => sl.setLimits(70, 150, 5).setValue(s.handSize).setDynamicTooltip().onChange((v) => ((s.handSize = v), save())));
@@ -182,6 +213,55 @@ export class FlipViewSettingTab extends PluginSettingTab {
       .setDesc("Reset to use the theme's default ink.")
       .addColorPicker((c) => c.setValue(s.inkColor || "#2b2a4c").onChange((v) => ((s.inkColor = v), save())))
       .addExtraButton((b) => b.setIcon("rotate-ccw").setTooltip("Reset").onClick(() => ((s.inkColor = ""), save(), this.display())));
+
+    new Setting(containerEl).setName("Highlighters").setHeading();
+
+    containerEl.createEl("p", {
+      cls: "setting-item-description",
+      text: "Highlighters sit on the desk. Click one, then drag over text in an open notebook to highlight it. Click a highlight with the pen active to remove it.",
+    });
+    s.highlighters.forEach((hl, i) => {
+      new Setting(containerEl)
+        .setName(`Highlighter ${i + 1}`)
+        .addColorPicker((c) => c.setValue(hl.color).onChange((v) => ((hl.color = v), save())))
+        .addText((t) => t.setPlaceholder("What it means").setValue(hl.label).onChange((v) => ((hl.label = v), save())))
+        .addExtraButton((b) =>
+          b
+            .setIcon("trash-2")
+            .setTooltip("Remove")
+            .onClick(() => {
+              s.highlighters.splice(i, 1);
+              save();
+              this.display();
+            }),
+        );
+    });
+    new Setting(containerEl).addButton((b) =>
+      b
+        .setButtonText("Add highlighter")
+        .setDisabled(s.highlighters.length >= 8)
+        .onClick(() => {
+          const spare = ["#ffb86b", "#c9a7ff", "#7fe0d0", "#ff8a80"];
+          s.highlighters.push({ color: spare[s.highlighters.length % spare.length], label: "" });
+          save();
+          this.display();
+        }),
+    );
+    new Setting(containerEl)
+      .setName("Show legend on the desk")
+      .setDesc("A sticky note listing what each colour means. Drag it wherever you like.")
+      .addToggle((t) => t.setValue(s.showLegend).onChange((v) => ((s.showLegend = v), save())))
+      .addExtraButton((b) => b.setIcon("rotate-ccw").setTooltip("Reset position").onClick(() => ((s.legendPos = null), save())));
+
+    new Setting(containerEl).setName("Sound").setHeading();
+
+    new Setting(containerEl)
+      .setName("Sound effects")
+      .setDesc("Paper and cover sounds when flipping, plus pen clicks and marker squeaks when highlighting.")
+      .addToggle((t) => t.setValue(s.soundEnabled).onChange((v) => ((s.soundEnabled = v), save())));
+    new Setting(containerEl)
+      .setName("Volume")
+      .addSlider((sl) => sl.setLimits(0, 100, 5).setValue(s.soundVolume).setDynamicTooltip().onChange((v) => ((s.soundVolume = v), save())));
 
     new Setting(containerEl).setName("Text view").setHeading();
 

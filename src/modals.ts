@@ -1,4 +1,5 @@
 import { App, Modal, Setting } from "obsidian";
+import { CoverStyle, FlipViewSettings, Notebook } from "./types";
 
 export class NewNotebookModal extends Modal {
   private name = "";
@@ -45,11 +46,138 @@ export class HelpModal extends Modal {
       "Switch between Handwritten and Text at the top. Text uses your own note font; handwriting is generated from the same text.",
       "The list button under the book jumps to any note. The page icon opens the note itself.",
       "Click the dice on a closed notebook to shuffle its cover. Covers are generated randomly per notebook, with no AI involved.",
-      "In settings you can group notes by folder or by a property, and tune handwriting font, size and messiness.",
+      "The outline on the right lists the notebook's notes. Drag rows (or use the arrows) to reorder them, and add separator pages between notes. Headings and highlights of the open note are listed under it.",
+      "Highlighters sit on the desk: click one, then drag over text to highlight. Click a highlight with the pen active to remove it. The sticky note is a draggable legend.",
+      "Rename a notebook with the pencil beside it in the list, or restyle its cover with the palette button on its closed cover.",
+      "In settings you can group notes by folder or by a property, and tune handwriting font (including cursive), heading case, size, messiness, covers, highlighters and sound.",
     ].forEach((t) => ul.createEl("li", { text: t }));
   }
 
   onClose(): void {
     this.contentEl.empty();
+  }
+}
+
+export class PromptModal extends Modal {
+  private value: string;
+  private settled = false;
+
+  constructor(
+    app: App,
+    private o: { title: string; value?: string; hint?: string; placeholder?: string; resetLabel?: string },
+    private done: (v: string | null) => void,
+  ) {
+    super(app);
+    this.value = o.value ?? "";
+  }
+
+  private finish(v: string | null): void {
+    if (this.settled) return;
+    this.settled = true;
+    this.close();
+    this.done(v);
+  }
+
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.empty();
+    this.titleEl.setText(this.o.title);
+    if (this.o.hint) contentEl.createEl("p", { text: this.o.hint, cls: "setting-item-description" });
+    new Setting(contentEl).setName("Name").addText((t) => {
+      t.setPlaceholder(this.o.placeholder ?? "").setValue(this.value).onChange((v) => (this.value = v));
+      t.inputEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") this.finish(this.value);
+      });
+      window.setTimeout(() => {
+        t.inputEl.focus();
+        t.inputEl.select();
+      }, 30);
+    });
+    const row = new Setting(contentEl);
+    if (this.o.resetLabel) row.addButton((b) => b.setButtonText(this.o.resetLabel as string).onClick(() => this.finish("")));
+    row.addButton((b) => b.setButtonText("Cancel").onClick(() => this.finish(null)));
+    row.addButton((b) => b.setButtonText("OK").setCta().onClick(() => this.finish(this.value)));
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+    if (!this.settled) {
+      this.settled = true;
+      this.done(null);
+    }
+  }
+}
+
+export const COVER_STYLE_OPTIONS: Array<[CoverStyle, string]> = [
+  ["random", "Random"],
+  ["cosmic", "Cosmic"],
+  ["leather", "Leather"],
+  ["linen", "Linen"],
+  ["marble", "Marble"],
+  ["geometric", "Geometric"],
+  ["plain", "Plain cloth"],
+  ["kraft", "Kraft paper"],
+  ["gradient", "Colourful gradient"],
+  ["watercolor", "Watercolour"],
+  ["terrazzo", "Terrazzo"],
+  ["waves", "Waves"],
+];
+
+/** Per-notebook cover options: style, colour and a fresh random seed. */
+export class CoverModal extends Modal {
+  constructor(app: App, private s: FlipViewSettings, private nb: Notebook, private done: () => void) {
+    super(app);
+  }
+
+  onOpen(): void {
+    const { contentEl } = this;
+    const s = this.s;
+    const id = this.nb.id;
+    contentEl.empty();
+    this.titleEl.setText(`Cover: ${this.nb.name}`);
+    const ov = () => (s.coverOverrides[id] ??= {});
+    const tidy = () => {
+      const o = s.coverOverrides[id];
+      if (o && !o.style && !o.color) delete s.coverOverrides[id];
+    };
+
+    new Setting(contentEl)
+      .setName("Style")
+      .setDesc("Leave on “Same as default” to follow the plugin setting.")
+      .addDropdown((d) => {
+        d.addOption("", "Same as default");
+        COVER_STYLE_OPTIONS.forEach(([v, l]) => d.addOption(v, l));
+        d.setValue(s.coverOverrides[id]?.style ?? "").onChange((v) => {
+          ov().style = (v || undefined) as CoverStyle | undefined;
+          tidy();
+        });
+      });
+
+    new Setting(contentEl)
+      .setName("Colour")
+      .setDesc("Tints the cover. Reset to use the default (or a random colour).")
+      .addColorPicker((c) => c.setValue(s.coverOverrides[id]?.color || s.coverColor || "#7c5cbf").onChange((v) => ((ov().color = v), tidy())))
+      .addExtraButton((b) =>
+        b
+          .setIcon("rotate-ccw")
+          .setTooltip("Reset colour")
+          .onClick(() => {
+            if (s.coverOverrides[id]) delete s.coverOverrides[id].color;
+            tidy();
+            this.onOpen();
+          }),
+      );
+
+    new Setting(contentEl)
+      .setName("Shuffle")
+      .setDesc("Roll a different random design in the same style.")
+      .addButton((b) => b.setButtonText("Shuffle cover").onClick(() => ((s.coverSeeds[id] = (Math.random() * 0xffffffff) >>> 0), undefined)));
+
+    new Setting(contentEl).addButton((b) => b.setButtonText("Done").setCta().onClick(() => this.close()));
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+    this.done();
   }
 }

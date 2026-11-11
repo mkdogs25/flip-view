@@ -1,6 +1,7 @@
 import { Component, MarkdownRenderer, Notice, TFile, normalizePath } from "obsidian";
 import { buildNotebooks } from "./grouping";
-import { HelpModal, NewNotebookModal } from "./modals";
+import { CoverModal, HelpModal, NewNotebookModal, PromptModal } from "./modals";
+import { MathItem, extractMath, restoreMath } from "./render/handmath";
 import type FlipViewPlugin from "./main";
 import { FlipViewSettings, NotebookHost, NoteRef, Notebook } from "./types";
 
@@ -21,21 +22,36 @@ export class ObsidianHost implements NotebookHost {
     return buildNotebooks(this.plugin.app, this.plugin.settings);
   }
 
-  async renderNote(note: NoteRef, el: HTMLElement): Promise<() => void> {
+  async renderNote(note: NoteRef, el: HTMLElement, opts: { hand: boolean }): Promise<() => void> {
     const { app } = this.plugin;
     const file = app.vault.getAbstractFileByPath(note.path);
     if (!(file instanceof TFile)) throw new Error(`Note not found: ${note.path}`);
     let md = (await app.vault.read(file)).replace(FRONTMATTER, "");
     if (this.settings.showNoteTitle && !/^\s*#\s+\S/.test(md)) md = `# ${note.title}\n\n${md}`;
+    let math: MathItem[] = [];
+    if (opts.hand) {
+      const x = extractMath(md);
+      md = x.md;
+      math = x.items;
+    }
     const child = new Component();
     this.owner.addChild(child);
     try {
       await MarkdownRenderer.render(app, md, el, note.path, child);
+      if (opts.hand) restoreMath(el, math);
     } catch (err) {
       console.error("[flip-view] render failed", err);
       el.createEl("p", { text: "This note could not be rendered." });
     }
     return () => this.owner.removeChild(child);
+  }
+
+  promptText(opts: { title: string; value?: string; hint?: string; placeholder?: string; resetLabel?: string }): Promise<string | null> {
+    return new Promise((resolve) => new PromptModal(this.plugin.app, opts, resolve).open());
+  }
+
+  customiseCover(nb: Notebook): Promise<void> {
+    return new Promise((resolve) => new CoverModal(this.plugin.app, this.plugin.settings, nb, resolve).open());
   }
 
   openNote(path: string, newTab: boolean): void {

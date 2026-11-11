@@ -12,6 +12,11 @@ in 3D; turn pages to read your notes either as **handwriting** or as **formatted
 - **Handwritten / Text toggle.** Text view renders through Obsidian itself, so your note font, theme and plugins' post-processing apply.
   Handwriting view re-sets the same note in a handwriting font with per-word jitter. Messiness, font, size, ink colour and paper (plain, lined, grid, dotted) are configurable. It is seeded per note, so a note always looks the same.
 - **Generated covers.** Every notebook gets a random cover (cosmic, leather, linen, marble or geometric) painted on a canvas from seeded noise: no AI. Use the dice button to reroll one, or fix a style in settings.
+- **Outline panel** on the right: reorder notes by dragging, add **separator pages** between notes, jump to headings and highlights.
+- **Handwriting extras:** cursive fonts, small-caps handwritten headings (configurable), maths and code written out by hand, and on ruled/grid/dotted paper words sit on the line.
+- **Highlighters** on the desk (any number, any colour) with a draggable sticky-note **legend**. Highlights are saved per note.
+- **Sound effects** (synthesised, adjustable or off): page flips, cover open/close, pen clicks, marker squeaks.
+- **Rename notebooks** without touching your folders or properties, and pick a cover style, colour and label per notebook (leather, plain cloth, kraft, gradient, watercolour, terrazzo, waves, ...).
 - Contents list, keyboard navigation (←/→, Esc), full-screen mode, "last edited" badge, live updates when notes change.
 
 Commands: *Open notebook view*, *Show current note in its notebook*, *Toggle handwritten / text preview*.

@@ -2,9 +2,10 @@ import { setIcon } from "obsidian";
 import { handFontInfo } from "../render/fonts";
 import deskDark from "../../assets/desk/desk-dark.jpg";
 import deskLight from "../../assets/desk/desk-light.jpg";
-import { Notebook, NotebookHost, ViewMode } from "../types";
+import { Notebook, NotebookHost, ViewMode, realNoteCount } from "../types";
 import { BookStage } from "./book";
 import { iconButton } from "./dom";
+import { OutlinePanel } from "./outline";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 let uid = 0;
@@ -17,6 +18,7 @@ export class NotebookApp {
   private searchInput: HTMLInputElement;
   private empty: HTMLElement;
   private stage: BookStage;
+  private outline: OutlinePanel;
   private displace: SVGElement;
   private wobbleId: string;
   private notebooks: Notebook[] = [];
@@ -83,10 +85,24 @@ export class NotebookApp {
     // stage
     this.stage = new BookStage(this.root, host, {
       toggleSidebar: () => this.toggleSidebar(),
+      toggleOutline: () => this.toggleOutline(),
       toggleFocus: () => this.toggleFocus(),
       modeChanged: (mode) => this.setMode(mode),
+      customiseCover: (nb) => void this.customiseCover(nb),
+      stateChanged: () => this.refreshOutline(),
     });
     this.empty = this.stage.el.createDiv({ cls: "fv-empty" });
+
+    this.outline = new OutlinePanel(this.root, {
+      open: (i) => void this.stage.goToNote(i),
+      page: (i, page) => void this.stage.jumpToPage(i, page),
+      reorder: (from, to) => this.reorder(from, to),
+      addSeparator: () => void this.addSeparator(),
+      renameSeparator: (i) => void this.renameSeparator(i),
+      deleteSeparator: (i) => this.deleteSeparator(i),
+      removeHighlight: (id) => this.stage.removeHighlight(id),
+      toggle: () => this.toggleOutline(),
+    });
 
     this.root.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && this.root.hasClass("fv-focus") && !this.stage.currentNotebook()?.notes.length) {
@@ -107,6 +123,7 @@ export class NotebookApp {
     this.ro = new ResizeObserver(() => this.checkNarrow());
     this.ro.observe(this.root);
     this.root.toggleClass("is-sidebar-collapsed", host.settings.sidebarCollapsed);
+    this.root.toggleClass("is-outline-collapsed", host.settings.outlineCollapsed);
     this.applySettings();
   }
 
@@ -197,6 +214,104 @@ export class NotebookApp {
     }
   }
 
+  private toggleOutline(): void {
+    const collapsed = !this.root.hasClass("is-outline-collapsed");
+    this.root.toggleClass("is-outline-collapsed", collapsed);
+    if (!this.narrow) {
+      this.host.settings.outlineCollapsed = collapsed;
+      this.host.saveSettings();
+    }
+  }
+
+  /* ------------------------------------------------- editing the notebook */
+
+  private refreshOutline(): void {
+    if (!this.outline) return;
+    const nb = this.stage.currentNotebook();
+    this.outline.render(nb, {
+      current: this.stage.currentIndex(),
+      headings: this.stage.currentHeadings(),
+      highlights: this.stage.currentHighlights(),
+    });
+  }
+
+  private reload(): void {
+    this.setNotebooks(this.host.getNotebooks());
+  }
+
+  private reorder(from: number, to: number): void {
+    const nb = this.stage.currentNotebook();
+    if (!nb || to < 0 || to >= nb.notes.length || from === to) return;
+    const keys = nb.notes.map((n) => n.path);
+    const [moved] = keys.splice(from, 1);
+    keys.splice(to, 0, moved);
+    this.host.settings.noteOrder[nb.id] = keys;
+    this.host.saveSettings();
+    this.stage.tick();
+    this.reload();
+  }
+
+  private async addSeparator(): Promise<void> {
+    const nb = this.stage.currentNotebook();
+    if (!nb) return;
+    const title = await this.host.promptText({
+      title: "Add separator page",
+      placeholder: "Chapter two",
+      hint: "A divider page with this title, placed after the note you're reading (or at the end).",
+    });
+    if (!title?.trim()) return;
+    const id = Math.random().toString(36).slice(2, 9);
+    const keys = nb.notes.map((n) => n.path);
+    const at = this.stage.currentIndex();
+    keys.splice(at >= 0 ? at + 1 : keys.length, 0, "sep:" + id);
+    (this.host.settings.separators[nb.id] ??= {})[id] = title.trim();
+    this.host.settings.noteOrder[nb.id] = keys;
+    this.host.saveSettings();
+    this.reload();
+  }
+
+  private async renameSeparator(index: number): Promise<void> {
+    const nb = this.stage.currentNotebook();
+    const n = nb?.notes[index];
+    if (!nb || !n?.sepId) return;
+    const title = await this.host.promptText({ title: "Rename separator", value: n.title });
+    if (!title?.trim()) return;
+    this.host.settings.separators[nb.id][n.sepId] = title.trim();
+    this.host.saveSettings();
+    this.reload();
+  }
+
+  private deleteSeparator(index: number): void {
+    const nb = this.stage.currentNotebook();
+    const n = nb?.notes[index];
+    if (!nb || !n?.sepId) return;
+    delete this.host.settings.separators[nb.id]?.[n.sepId];
+    this.host.settings.noteOrder[nb.id] = (this.host.settings.noteOrder[nb.id] ?? nb.notes.map((x) => x.path)).filter((k) => k !== n.path);
+    this.host.saveSettings();
+    this.reload();
+  }
+
+  private async renameNotebook(nb: Notebook): Promise<void> {
+    const v = await this.host.promptText({
+      title: "Rename notebook",
+      value: nb.name,
+      hint: `This only changes the name shown here. Your folders, properties and notes are not touched. Original: "${nb.originalName}".`,
+      resetLabel: "Reset to original",
+    });
+    if (v === null) return;
+    const name = v.trim();
+    if (!name || name === nb.originalName) delete this.host.settings.notebookNames[nb.id];
+    else this.host.settings.notebookNames[nb.id] = name;
+    this.host.saveSettings();
+    this.reload();
+  }
+
+  private async customiseCover(nb: Notebook): Promise<void> {
+    await this.host.customiseCover(nb);
+    this.host.saveSettings();
+    this.stage.applySettings();
+  }
+
   private toggleFocus(): void {
     const on = !this.root.hasClass("fv-focus");
     this.root.toggleClass("fv-focus", on);
@@ -217,6 +332,7 @@ export class NotebookApp {
     this.narrow = narrow;
     this.root.toggleClass("is-narrow", narrow);
     this.root.toggleClass("is-sidebar-collapsed", narrow ? true : this.host.settings.sidebarCollapsed);
+    this.root.toggleClass("is-outline-collapsed", narrow ? true : this.host.settings.outlineCollapsed);
   }
 
   private renderList(): void {
@@ -227,8 +343,15 @@ export class NotebookApp {
       row.toggleClass("is-selected", nb.id === this.selectedId);
       setIcon(row.createSpan({ cls: "fv-nbitem-icon" }), "book");
       row.createSpan({ cls: "fv-nbitem-name", text: nb.name });
-      row.createSpan({ cls: "fv-nbitem-count", text: String(nb.notes.length) });
+      row.createSpan({ cls: "fv-nbitem-count", text: String(realNoteCount(nb)) });
+      const rename = row.createSpan({ cls: "fv-nbitem-rename", attr: { role: "button", "aria-label": "Rename notebook", title: "Rename notebook" } });
+      setIcon(rename, "pencil");
+      rename.addEventListener("click", (e) => {
+        e.stopPropagation();
+        void this.renameNotebook(nb);
+      });
       row.addEventListener("click", () => this.select(nb.id));
+      row.addEventListener("dblclick", () => void this.renameNotebook(nb));
     }
     if (items.length === 0 && this.notebooks.length > 0) this.listEl.createDiv({ cls: "fv-nblist-empty", text: "No matching notebooks" });
   }

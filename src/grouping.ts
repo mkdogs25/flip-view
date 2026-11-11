@@ -1,5 +1,6 @@
 import { App, TFile } from "obsidian";
 import { FlipViewSettings, NoteRef, Notebook } from "./types";
+import { hashString } from "./util/rng";
 
 const naturalCompare = (a: string, b: string): number =>
   a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
@@ -62,6 +63,31 @@ function sortNotes(notes: NoteRef[], mode: FlipViewSettings["noteSort"]): void {
   }
 }
 
+/** Applies the user's rename, manual order and separator pages. New notes land at the end. */
+export function finishNotebook(nb: Notebook, s: FlipViewSettings): void {
+  const custom = s.notebookNames[nb.id]?.trim();
+  nb.name = custom || nb.originalName;
+  const seps = s.separators[nb.id] ?? {};
+  const byKey = new Map<string, NoteRef>();
+  for (const n of nb.notes) byKey.set(n.path, n);
+  for (const [id, title] of Object.entries(seps)) {
+    byKey.set("sep:" + id, { path: "sep:" + id, title, mtime: hashString(title), ctime: 0, kind: "separator", sepId: id });
+  }
+  const out: NoteRef[] = [];
+  const used = new Set<string>();
+  const take = (key: string) => {
+    const n = byKey.get(key);
+    if (n && !used.has(key)) {
+      used.add(key);
+      out.push(n);
+    }
+  };
+  (s.noteOrder[nb.id] ?? []).forEach(take);
+  nb.notes.forEach((n) => take(n.path));
+  Object.keys(seps).forEach((id) => take("sep:" + id));
+  nb.notes = out;
+}
+
 function sortNotebooks(list: Notebook[], mode: FlipViewSettings["notebookSort"]): void {
   const latest = (nb: Notebook) => nb.notes.reduce((m, n) => Math.max(m, n.mtime), 0);
   if (mode === "recent") list.sort((a, b) => latest(b) - latest(a));
@@ -75,7 +101,7 @@ export function buildNotebooks(app: App, s: FlipViewSettings): Notebook[] {
   const add = (id: string, name: string, file: TFile) => {
     let nb = groups.get(id);
     if (!nb) {
-      nb = { id, name, notes: [] };
+      nb = { id, name, originalName: name, notes: [] };
       groups.set(id, nb);
     }
     nb.notes.push(toRef(file));
@@ -119,7 +145,10 @@ export function buildNotebooks(app: App, s: FlipViewSettings): Notebook[] {
   }
 
   const list = [...groups.values()];
-  for (const nb of list) sortNotes(nb.notes, s.noteSort);
+  for (const nb of list) {
+    sortNotes(nb.notes, s.noteSort);
+    finishNotebook(nb, s);
+  }
   sortNotebooks(list, s.notebookSort);
   return list;
 }

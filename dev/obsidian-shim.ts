@@ -69,6 +69,14 @@ const ICON_PATHS: Record<string, string> = {
   "chevron-left": "M15 5l-7 7 7 7",
   "chevron-right": "M9 5l7 7-7 7",
   "file-text": "M6 3h8l4 4v14H6zM9 12h6M9 16h6",
+  palette: "M12 3a9 9 0 100 18c1.5 0 2-1 1.5-2s0-2 1.5-2h2a3 3 0 003-3c0-5-4-11-8-11z",
+  "panel-right": "M4 4h16v16H4zM15 4v16",
+  "grip-vertical": "M9 5v.1M9 12v.1M9 19v.1M15 5v.1M15 12v.1M15 19v.1",
+  bookmark: "M6 3h12v18l-6-4-6 4z",
+  "bookmark-plus": "M6 3h12v18l-6-4-6 4zM12 7v6M9 10h6",
+  "trash-2": "M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13",
+  "chevron-up": "M5 15l7-7 7 7",
+  "chevron-down": "M5 9l7 7 7-7",
   clock: "M12 3a9 9 0 100 18 9 9 0 000-18zM12 7v5l3 2",
 };
 

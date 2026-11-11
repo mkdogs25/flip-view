@@ -337,6 +337,7 @@
   flex: 1;
   min-width: 0;
   overflow: hidden;
+  overflow: clip; /* never scroll, even programmatically (the pens poke out of the bottom edge) */
   --fv-pw: 300px;
   --fv-ph: 400px;
   --fv-iw: 240px;
@@ -623,12 +624,12 @@
   font-family: var(--font-interface);
 }
 
-/* ruled paper (handwritten only) */
+/* ruled paper (handwritten only): rules run along the baseline of the handwriting */
 
 .fv-mode-hand.fv-paper-lined .fv-page {
   background-image: linear-gradient(to bottom, transparent calc(var(--fv-lh) - 1px), var(--fv-line) calc(var(--fv-lh) - 1px));
   background-size: 100% var(--fv-lh);
-  background-position: 0 calc(var(--fv-pt) + 3px);
+  background-position: 0 calc(var(--fv-pt) + var(--fv-base, calc(var(--fv-lh) * 0.75)) - var(--fv-lh) + 2px);
   --fv-pgap: 1;
 }
 
@@ -636,15 +637,31 @@
   background-image: linear-gradient(to bottom, transparent calc(var(--fv-lh) - 1px), var(--fv-line) calc(var(--fv-lh) - 1px)),
     linear-gradient(to right, transparent calc(var(--fv-lh) - 1px), var(--fv-line) calc(var(--fv-lh) - 1px));
   background-size: var(--fv-lh) var(--fv-lh);
-  background-position: 0 calc(var(--fv-pt) + 3px), 0 0;
+  background-position: 0 calc(var(--fv-pt) + var(--fv-base, calc(var(--fv-lh) * 0.75)) - var(--fv-lh) + 2px), 0 0;
   --fv-pgap: 1;
 }
 
 .fv-mode-hand.fv-paper-dotted .fv-page {
   background-image: radial-gradient(circle, var(--fv-line) 1.2px, transparent 1.6px);
   background-size: var(--fv-lh) var(--fv-lh);
-  background-position: 0 var(--fv-pt);
+  background-position: 0 calc(var(--fv-pt) + var(--fv-base, calc(var(--fv-lh) * 0.75)) - var(--fv-lh) / 2 + 2px);
   --fv-pgap: 1;
+}
+
+/* on ruled paper every block is a whole number of lines so words keep sitting on the rules */
+.fv-mode-hand:is(.fv-paper-lined, .fv-paper-grid, .fv-paper-dotted) .fv-flow :is(h1, h2, h3, h4, h5, h6, th, td) {
+  line-height: var(--fv-lh);
+}
+
+.fv-mode-hand:is(.fv-paper-lined, .fv-paper-grid, .fv-paper-dotted) .fv-flow pre {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.fv-mode-hand:is(.fv-paper-lined, .fv-paper-grid, .fv-paper-dotted) .fv-flow .math-block,
+.fv-mode-hand:is(.fv-paper-lined, .fv-paper-grid, .fv-paper-dotted) .fv-flow .fv-hmath-block {
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 /* edge click zones */
@@ -1282,7 +1299,7 @@
   font-size: var(--fv-fs);
   line-height: var(--fv-lh);
   color: var(--fv-ink);
-  font-synthesis: none;
+  font-synthesis: small-caps;
   --text-normal: var(--fv-ink);
   --text-muted: color-mix(in srgb, var(--fv-ink) 72%, transparent);
   --text-faint: color-mix(in srgb, var(--fv-ink) 55%, transparent);
@@ -1305,6 +1322,7 @@
 }
 
 .fv-mode-hand .fv-flow :is(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--fv-heading-font, var(--fv-hand-font));
   position: relative;
   margin: 0 0 var(--fv-gap);
   padding: 0;
@@ -1315,21 +1333,55 @@
 }
 
 .fv-mode-hand .fv-flow h1 {
-  font-size: 1.55em;
+  font-size: calc(1.55em * var(--fv-hscale, 1) * var(--fv-hboost, 1));
   line-height: calc(var(--fv-lh) * 1.6);
   color: var(--fv-ink);
 }
 
 .fv-mode-hand .fv-flow h2 {
   margin-top: var(--fv-gap);
-  font-size: 1.3em;
+  font-size: calc(1.3em * var(--fv-hscale, 1) * var(--fv-hboost, 1));
   color: var(--fv-accent-text);
 }
 
 .fv-mode-hand .fv-flow :is(h3, h4, h5, h6) {
   margin-top: var(--fv-gap);
-  font-size: 1.12em;
+  font-size: calc(1.12em * var(--fv-hscale, 1) * var(--fv-hboost, 1));
   color: var(--fv-accent-text);
+}
+
+/* heading and body case */
+.fv-mode-hand.fv-hc-smallcaps .fv-flow :is(h1, h2, h3, h4, h5, h6) {
+  font-variant: small-caps;
+  font-synthesis: small-caps;
+  letter-spacing: 0.05em;
+  --fv-hboost: 1.12;
+}
+
+.fv-mode-hand.fv-hc-uppercase .fv-flow :is(h1, h2, h3, h4, h5, h6) {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.fv-mode-hand.fv-hc-normal .fv-flow :is(h1, h2, h3, h4, h5, h6) {
+  font-variant: normal;
+  text-transform: none;
+}
+
+.fv-mode-hand.fv-bc-smallcaps .fv-flow {
+  font-variant: small-caps;
+  font-synthesis: small-caps;
+  letter-spacing: 0.03em;
+}
+
+.fv-mode-hand.fv-bc-uppercase .fv-flow {
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.fv-mode-hand.fv-bc-smallcaps .fv-flow :is(h1, h2, h3, h4, h5, h6):not(.fv-x),
+.fv-mode-hand.fv-bc-uppercase .fv-flow :is(h1, h2, h3, h4, h5, h6):not(.fv-x) {
+  letter-spacing: 0.05em;
 }
 
 .fv-mode-hand .fv-flow h1::after,
@@ -1587,5 +1639,684 @@
   .fv-book::before,
   .fv-seg-thumb {
     transition: none;
+  }
+}
+
+
+/* ===================================================================== */
+/* Handwritten maths and code                                             */
+/* ===================================================================== */
+
+.fv-hmath {
+  white-space: nowrap;
+  color: var(--fv-ink);
+}
+
+.fv-hmath-block {
+  display: block;
+  position: relative;
+  margin: calc(var(--fv-lh) * 0.3) 0 var(--fv-gap);
+  padding: calc(var(--fv-lh) * 0.2) 0.6em;
+  text-align: center;
+  font-size: 1.12em;
+  white-space: normal;
+  break-inside: avoid;
+}
+
+.fv-hmath-block::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1.6px solid color-mix(in srgb, var(--fv-accent) 80%, transparent);
+  border-radius: 8px;
+  pointer-events: none;
+  filter: var(--fv-wobble);
+}
+
+.fv-hmath .fv-script {
+  font-size: 0.68em;
+  line-height: 0;
+}
+
+.fv-hmath sup.fv-script {
+  vertical-align: 0.65em;
+}
+
+.fv-hmath sub.fv-script {
+  vertical-align: -0.35em;
+}
+
+.fv-frac {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  vertical-align: middle;
+  margin: 0 0.15em;
+  line-height: 1.05;
+  text-align: center;
+}
+
+.fv-frac > .fv-num {
+  padding: 0 0.2em 0.04em;
+  border-bottom: 1.4px solid currentColor;
+  filter: var(--fv-wobble);
+}
+
+.fv-frac > .fv-den {
+  padding: 0.04em 0.2em 0;
+}
+
+.fv-sqrt .fv-radicand {
+  border-top: 1.4px solid currentColor;
+  padding: 0 0.15em;
+}
+
+.fv-mode-hand .fv-flow pre .token.keyword,
+.fv-mode-hand .fv-flow pre .token.function,
+.fv-mode-hand .fv-flow pre .token.class-name {
+  color: var(--fv-accent-text);
+}
+
+.fv-mode-hand .fv-flow pre .token {
+  background: none;
+}
+
+.fv-mode-hand .fv-flow pre .token.comment {
+  color: var(--fv-text-muted);
+  opacity: 0.8;
+}
+
+.fv-mode-hand .fv-flow pre .token:not(.keyword):not(.function):not(.class-name):not(.comment) {
+  color: inherit;
+}
+
+/* ===================================================================== */
+/* Separator pages                                                        */
+/* ===================================================================== */
+
+.fv-flow-sep {
+  color: var(--fv-ink);
+}
+
+.fv-sep-spacer {
+  height: 1px;
+  break-after: column;
+}
+
+.fv-sep {
+  height: var(--fv-ih);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  break-inside: avoid;
+}
+
+.fv-flow .fv-sep-title {
+  margin: 0;
+  max-width: 100%;
+  border: 0;
+  padding: 0;
+  font-size: calc(var(--fv-fs) * 2.1);
+  line-height: 1.15;
+  color: var(--fv-accent-text);
+}
+
+.fv-mode-hand .fv-flow .fv-sep-title::after {
+  display: none;
+}
+
+.fv-mode-text .fv-flow .fv-sep-title {
+  font-family: "FV Playfair", Georgia, serif;
+  font-weight: 600;
+}
+
+.fv-sep-flourish {
+  width: 46%;
+  height: 0;
+  margin-top: calc(var(--fv-fs) * 0.9);
+  border-top: 2px solid var(--fv-accent);
+  opacity: 0.7;
+  filter: var(--fv-wobble);
+}
+
+.fv-sep-tab {
+  position: absolute;
+  right: -1px;
+  top: 14%;
+  width: calc(var(--fv-px) * 0.62);
+  height: 32%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0 8px 8px 0;
+  background: var(--fv-accent);
+  box-shadow: 1px 2px 5px rgba(0, 0, 0, 0.3);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.fv-sep-tab span {
+  writing-mode: vertical-rl;
+  color: #fff;
+  font-size: calc(11px * var(--fv-s));
+  font-family: var(--font-interface);
+  letter-spacing: 0.06em;
+  max-height: 90%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* ===================================================================== */
+/* Highlighter pens, legend and highlights                                */
+/* ===================================================================== */
+
+.fv-hl {
+  background: linear-gradient(transparent 14%, color-mix(in srgb, var(--hl) 72%, transparent) 14%, color-mix(in srgb, var(--hl) 72%, transparent) 90%, transparent 90%);
+  border-radius: 3px 9px 4px 10px / 6px 8px 5px 9px;
+  padding: 0 1px;
+  margin: 0 -1px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  color: inherit;
+}
+
+.fv-root.fv-dark .fv-hl {
+  background: linear-gradient(transparent 14%, color-mix(in srgb, var(--hl) 46%, transparent) 14%, color-mix(in srgb, var(--hl) 46%, transparent) 90%, transparent 90%);
+}
+
+.fv-stage.is-highlighting .fv-page,
+.fv-stage.is-highlighting .fv-flow {
+  cursor: var(--fv-pen-cursor, text);
+}
+
+.fv-stage.is-highlighting .fv-edge {
+  pointer-events: none;
+}
+
+.fv-stage.is-highlighting .fv-flow ::selection,
+.fv-stage.is-highlighting .fv-flow::selection {
+  background: color-mix(in srgb, var(--fv-hl-active, #ffe45e) 65%, transparent);
+  color: inherit;
+}
+
+.fv-tray {
+  position: absolute;
+  left: 24px;
+  bottom: -52px;
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  z-index: 16;
+  pointer-events: none;
+}
+
+.fv-root .fv-pen {
+  position: relative;
+  width: 25px;
+  height: 118px;
+  flex: none;
+  pointer-events: auto;
+  transform: rotate(var(--r, 0deg)) translateY(0);
+  transform-origin: 50% 100%;
+  transition: transform 0.28s cubic-bezier(0.3, 0.9, 0.3, 1.2);
+  filter: drop-shadow(0 4px 5px rgba(0, 0, 0, 0.35));
+}
+
+.fv-root .fv-pen:hover {
+  transform: rotate(var(--r, 0deg)) translateY(-12px);
+}
+
+.fv-root .fv-pen.is-active {
+  transform: rotate(0deg) translateY(-40px);
+}
+
+.fv-pen-cap {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 36%;
+  border-radius: 9px 9px 3px 3px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.4), transparent 38%, rgba(0, 0, 0, 0.25)), color-mix(in srgb, var(--pen) 70%, #222);
+}
+
+.fv-pen-body {
+  position: absolute;
+  top: 34%;
+  left: 1px;
+  right: 1px;
+  bottom: 12px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.1) 40%, rgba(0, 0, 0, 0.18)), var(--pen);
+  border-radius: 2px;
+}
+
+.fv-pen-tip {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 0;
+  height: 14px;
+  background: var(--pen);
+  clip-path: polygon(0 0, 100% 0, 82% 100%, 18% 100%);
+  filter: saturate(1.3) brightness(0.92);
+}
+
+.fv-legend {
+  position: absolute;
+  left: 24px;
+  bottom: 118px;
+  min-width: 132px;
+  max-width: 190px;
+  padding: 8px 12px 12px;
+  transform: rotate(-2.2deg);
+  background: linear-gradient(170deg, #fdf1a3, #f8e27d);
+  color: #4a3b17;
+  font-family: var(--fv-hand-font, var(--font-interface));
+  font-size: 15px;
+  line-height: 1.2;
+  box-shadow: 2px 6px 14px rgba(40, 25, 0, 0.35);
+  border-radius: 2px 2px 14px 2px;
+  z-index: 17;
+}
+
+.fv-legend::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  background: linear-gradient(315deg, transparent 50%, rgba(0, 0, 0, 0.12) 50%);
+  border-radius: 0 0 14px 0;
+}
+
+.fv-legend.is-dragging {
+  cursor: grabbing;
+  box-shadow: 4px 12px 22px rgba(40, 25, 0, 0.4);
+}
+
+.fv-legend-title {
+  cursor: grab;
+  margin: 0 -12px 6px;
+  padding: 0 12px 4px;
+  font-size: 17px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-bottom: 1.5px dashed rgba(74, 59, 23, 0.4);
+  user-select: none;
+  touch-action: none;
+}
+
+.fv-root .fv-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 2px 0;
+  text-align: left;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+.fv-root .fv-legend-row:hover {
+  background: none;
+  box-shadow: none;
+  text-decoration: underline;
+}
+
+.fv-root .fv-legend-row.is-active {
+  font-weight: 700;
+}
+
+.fv-legend-swatch {
+  flex: none;
+  width: 22px;
+  height: 11px;
+  border-radius: 3px 6px 3px 6px;
+  background: var(--pen);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+
+.fv-legend-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fv-root.is-narrow .fv-legend {
+  display: none;
+}
+
+/* ===================================================================== */
+/* Outline panel                                                          */
+/* ===================================================================== */
+
+.fv-outline {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  width: 250px;
+  margin: 14px 14px 14px 0;
+  padding: 14px 10px 10px;
+  border-radius: 18px;
+  z-index: 20;
+}
+
+.fv-root.is-outline-collapsed .fv-outline,
+.fv-root.fv-focus .fv-outline {
+  display: none;
+}
+
+.fv-root.is-narrow .fv-outline {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  bottom: 10px;
+  margin: 0;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+}
+
+.fv-ol-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px 10px;
+}
+
+.fv-ol-titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.fv-ol-title {
+  font-family: "FV Playfair", Georgia, serif;
+  font-weight: 600;
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fv-ol-sub {
+  font-size: 11.5px;
+  color: var(--fv-glass-muted);
+}
+
+.fv-ol-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.fv-ol-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px;
+  border-radius: 9px;
+}
+
+.fv-ol-row:hover {
+  background: var(--fv-glass-hover);
+}
+
+.fv-ol-row.is-current {
+  background: color-mix(in srgb, var(--fv-accent) 22%, transparent);
+}
+
+.fv-ol-row.is-dragging {
+  opacity: 0.4;
+}
+
+.fv-ol-row.drop-before::before,
+.fv-ol-row.drop-after::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--fv-accent);
+}
+
+.fv-ol-row.drop-before::before {
+  top: -2px;
+}
+
+.fv-ol-row.drop-after::after {
+  bottom: -2px;
+}
+
+.fv-ol-grip {
+  display: inline-flex;
+  color: var(--fv-glass-muted);
+  opacity: 0.5;
+  cursor: grab;
+}
+
+.fv-ol-grip svg,
+.fv-ol-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.fv-ol-icon {
+  display: inline-flex;
+  color: var(--fv-glass-muted);
+}
+
+.fv-ol-row.is-sep .fv-ol-icon {
+  color: var(--fv-accent-text);
+}
+
+.fv-root .fv-ol-label {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  font-size: 13px;
+}
+
+.fv-root .fv-ol-row.is-sep .fv-ol-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--fv-accent-text);
+}
+
+.fv-root .fv-ol-label:hover {
+  background: none;
+  box-shadow: none;
+}
+
+.fv-ol-actions {
+  display: none;
+  align-items: center;
+}
+
+.fv-ol-row:hover .fv-ol-actions {
+  display: flex;
+}
+
+.fv-ol-actions .fv-iconbtn {
+  width: 22px;
+  height: 22px;
+}
+
+.fv-ol-actions .fv-iconbtn svg {
+  width: 13px;
+  height: 13px;
+}
+
+.fv-ol-details {
+  margin: 0 0 4px 26px;
+  padding-left: 8px;
+  border-left: 1.5px solid color-mix(in srgb, var(--fv-glass-text) 14%, transparent);
+}
+
+.fv-root .fv-ol-heading {
+  display: block;
+  width: 100%;
+  padding: 2px 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  font-size: 12px;
+  color: var(--fv-glass-muted);
+}
+
+.fv-root .fv-ol-heading:hover {
+  background: none;
+  box-shadow: none;
+  color: var(--fv-glass-text);
+}
+
+.fv-ol-subhead {
+  margin: 6px 0 2px 4px;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fv-glass-muted);
+}
+
+.fv-ol-hl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fv-ol-hl .fv-iconbtn {
+  width: 20px;
+  height: 20px;
+  opacity: 0;
+}
+
+.fv-ol-hl:hover .fv-iconbtn {
+  opacity: 1;
+}
+
+.fv-ol-hl .fv-iconbtn svg {
+  width: 12px;
+  height: 12px;
+}
+
+.fv-ol-hl .fv-legend-swatch {
+  width: 14px;
+}
+
+.fv-ol-empty {
+  padding: 12px 8px;
+  font-size: 12.5px;
+  color: var(--fv-glass-muted);
+}
+
+.fv-ol-foot {
+  padding: 8px 6px 2px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--fv-glass-muted);
+  border-top: 1px solid color-mix(in srgb, var(--fv-glass-text) 10%, transparent);
+}
+
+/* sidebar rename affordance */
+
+.fv-nbitem-rename {
+  display: none;
+  align-items: center;
+  padding: 2px;
+  border-radius: 6px;
+  color: var(--fv-glass-muted);
+}
+
+.fv-nbitem-rename svg {
+  width: 13px;
+  height: 13px;
+}
+
+.fv-nbitem:hover .fv-nbitem-rename {
+  display: inline-flex;
+}
+
+.fv-nbitem:hover .fv-nbitem-count {
+  display: none;
+}
+
+.fv-nbitem-rename:hover {
+  background: var(--fv-glass-hover);
+  color: var(--fv-glass-text);
+}
+
+/* ===================================================================== */
+/* Cover label variants                                                   */
+/* ===================================================================== */
+
+.fv-no-band .fv-band {
+  display: none;
+}
+
+.fv-label-foil .fv-plate {
+  background: none;
+  box-shadow: none;
+  color: #f0d58a;
+}
+
+.fv-label-foil .fv-plate::before {
+  display: none;
+}
+
+.fv-label-foil .fv-plate-title {
+  background: linear-gradient(180deg, #fff1bd, #d9ae52 55%, #f6dc8f);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6));
+}
+
+.fv-label-foil .fv-plate-count {
+  color: #e6c877;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.6);
+}
+
+.fv-label-sticker .fv-plate {
+  top: 18%;
+  left: 38%;
+  width: 52%;
+  padding: calc(var(--fv-ph) * 0.03) calc(var(--fv-pw) * 0.04);
+  transform: translate(-50%, -50%) rotate(-3deg);
+  background: #fbf8ef;
+  border-radius: 2px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+
+.fv-label-sticker .fv-plate::before {
+  border: 1px solid rgba(40, 30, 60, 0.35);
+  border-radius: 1px;
+  inset: 4px;
+}
+
+.fv-label-sticker .fv-plate-title {
+  font-size: calc(var(--fv-ph) * 0.04);
+}
+
+.fv-label-sticker .fv-plate-title[data-size="s"],
+.fv-label-sticker .fv-plate-title[data-size="xs"] {
+  font-size: calc(var(--fv-ph) * 0.03);
+}
+
+@media (max-width: 1100px) {
+  .fv-root:not(.is-outline-collapsed):not(.is-narrow) .fv-outline {
+    width: 210px;
   }
 }

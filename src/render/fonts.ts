@@ -6,6 +6,9 @@ import reenieBeanie from "../../assets/fonts/reenie-beanie.woff2";
 import indieFlower from "../../assets/fonts/indie-flower.woff2";
 import shadows from "../../assets/fonts/shadows-into-light.woff2";
 import playfair from "../../assets/fonts/playfair.woff2";
+import dancing from "../../assets/fonts/dancing-script.woff2";
+import apple from "../../assets/fonts/homemade-apple.woff2";
+import belle from "../../assets/fonts/la-belle-aurore.woff2";
 
 export interface HandFontInfo {
   id: HandFont;
@@ -15,6 +18,8 @@ export interface HandFontInfo {
   size: number;
   /** Multiplier of the ruled line height. */
   line: number;
+  /** Joined-up script. */
+  cursive?: boolean;
 }
 
 export const HAND_FONTS: HandFontInfo[] = [
@@ -24,6 +29,9 @@ export const HAND_FONTS: HandFontInfo[] = [
   { id: "reenie-beanie", label: "Reenie Beanie – scrawl", family: "FV Reenie Beanie", size: 1.34, line: 1 },
   { id: "indie-flower", label: "Indie Flower – round", family: "FV Indie Flower", size: 0.95, line: 1 },
   { id: "shadows-into-light", label: "Shadows Into Light – slim", family: "FV Shadows Into Light", size: 1.02, line: 1 },
+  { id: "dancing-script", label: "Dancing Script – cursive", family: "FV Dancing Script", size: 1.02, line: 1, cursive: true },
+  { id: "homemade-apple", label: "Homemade Apple – loopy cursive", family: "FV Homemade Apple", size: 0.78, line: 1, cursive: true },
+  { id: "la-belle-aurore", label: "La Belle Aurore – slanted cursive", family: "FV La Belle Aurore", size: 1.15, line: 1, cursive: true },
 ];
 
 export function handFontInfo(id: HandFont): HandFontInfo {
@@ -45,6 +53,9 @@ export function injectFonts(): void {
     face("FV Reenie Beanie", reenieBeanie),
     face("FV Indie Flower", indieFlower),
     face("FV Shadows Into Light", shadows),
+    face("FV Dancing Script", dancing, "400 700"),
+    face("FV Homemade Apple", apple),
+    face("FV La Belle Aurore", belle),
     face("FV Playfair", playfair, "400 900"),
   ].join("\n");
   document.head.appendChild(el);

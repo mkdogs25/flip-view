@@ -1,13 +1,14 @@
 import { Rng, hashString } from "../util/rng";
 
-const SKIP = "pre, code, svg, script, style, mjx-container, .math, .fv-skip, textarea, input";
+const SKIP = "svg, script, style, mjx-container, .math, .fv-skip, textarea, input";
 
 /**
  * Turns rendered markdown into "handwriting": every word becomes a tiny inline-block that is nudged
  * (rotation, baseline, size, tracking, ink density) by a seeded random generator, so the same note
- * always looks identically hand-written. `messiness` is 0..1.
+ * always looks identically hand-written. `messiness` is 0..1; `tame` scales the vertical drift and tilt (used on ruled paper,
+ * where words should stay on the line).
  */
-export function handwrite(root: HTMLElement, seed: string, messiness: number): void {
+export function handwrite(root: HTMLElement, seed: string, messiness: number, tame = 1): void {
   const rng = new Rng(hashString(seed));
   const m = Math.max(0, Math.min(1, messiness));
   const doc = root.ownerDocument;
@@ -35,8 +36,8 @@ export function handwrite(root: HTMLElement, seed: string, messiness: number): v
       span.className = "fv-w";
       span.textContent = part;
       if (m > 0) {
-        const rot = rng.gauss() * m * 3.4;
-        const dy = rng.gauss() * m * 2.4;
+        const rot = rng.gauss() * m * 3.4 * tame;
+        const dy = rng.gauss() * m * 2.4 * tame;
         const sc = 1 + rng.gauss() * m * 0.07;
         const ls = rng.gauss() * m * 0.5;
         span.style.transform = `translateY(${dy.toFixed(2)}px) rotate(${rot.toFixed(2)}deg) scale(${sc.toFixed(3)})`;
