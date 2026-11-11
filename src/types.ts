@@ -49,7 +49,7 @@ export type HandFont =
   | "indie-flower"
   | "shadows-into-light"
   | "dancing-script"
-  | "homemade-apple"
+  | "alex-brush"
   | "la-belle-aurore";
 
 export interface HighlighterDef {
@@ -91,6 +91,8 @@ export interface FlipViewSettings {
   coverStyle: CoverStyle;
   paperStyle: PaperStyle;
   animation: "full" | "fast" | "off";
+  /** How pages are turned: click a page, pull its corner, or only the nav bar. */
+  flipMode: "click" | "drag" | "nav";
   showNoteTitle: boolean;
   showLastEdited: boolean;
   accentColor: string;
@@ -153,6 +155,7 @@ export const DEFAULT_SETTINGS: FlipViewSettings = {
   coverStyle: "random",
   paperStyle: "plain",
   animation: "full",
+  flipMode: "click",
   showNoteTitle: true,
   showLastEdited: true,
   accentColor: "",
@@ -217,5 +220,7 @@ export interface NotebookHost {
   createNotebook(): void;
   openSettings(): void;
   showHelp(): void;
+  /** Resolves an internal link to a vault path (and heading), or null if it points nowhere. */
+  resolveLink(href: string, sourcePath: string): { path: string; heading?: string } | null;
   isDarkTheme(): boolean;
 }

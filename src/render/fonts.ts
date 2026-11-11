@@ -7,7 +7,7 @@ import indieFlower from "../../assets/fonts/indie-flower.woff2";
 import shadows from "../../assets/fonts/shadows-into-light.woff2";
 import playfair from "../../assets/fonts/playfair.woff2";
 import dancing from "../../assets/fonts/dancing-script.woff2";
-import apple from "../../assets/fonts/homemade-apple.woff2";
+import alexBrush from "../../assets/fonts/alex-brush.woff2";
 import belle from "../../assets/fonts/la-belle-aurore.woff2";
 
 export interface HandFontInfo {
@@ -20,6 +20,8 @@ export interface HandFontInfo {
   line: number;
   /** Joined-up script. */
   cursive?: boolean;
+  /** Extra pen weight in px (text-stroke), for hairline scripts. */
+  stroke?: number;
 }
 
 export const HAND_FONTS: HandFontInfo[] = [
@@ -30,7 +32,7 @@ export const HAND_FONTS: HandFontInfo[] = [
   { id: "indie-flower", label: "Indie Flower – round", family: "FV Indie Flower", size: 0.95, line: 1 },
   { id: "shadows-into-light", label: "Shadows Into Light – slim", family: "FV Shadows Into Light", size: 1.02, line: 1 },
   { id: "dancing-script", label: "Dancing Script – cursive", family: "FV Dancing Script", size: 1.02, line: 1, cursive: true },
-  { id: "homemade-apple", label: "Homemade Apple – loopy cursive", family: "FV Homemade Apple", size: 0.78, line: 1, cursive: true },
+  { id: "alex-brush", label: "Alex Brush – loopy brush cursive", family: "FV Alex Brush", size: 1.32, line: 1, cursive: true, stroke: 0.4 },
   { id: "la-belle-aurore", label: "La Belle Aurore – slanted cursive", family: "FV La Belle Aurore", size: 1.15, line: 1, cursive: true },
 ];
 
@@ -54,7 +56,7 @@ export function injectFonts(): void {
     face("FV Indie Flower", indieFlower),
     face("FV Shadows Into Light", shadows),
     face("FV Dancing Script", dancing, "400 700"),
-    face("FV Homemade Apple", apple),
+    face("FV Alex Brush", alexBrush),
     face("FV La Belle Aurore", belle),
     face("FV Playfair", playfair, "400 900"),
   ].join("\n");

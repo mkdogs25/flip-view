@@ -463,6 +463,26 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  z-index: 5;
+  pointer-events: none;
+  transition: transform 0.85s cubic-bezier(0.5, 0.05, 0.2, 1), opacity 0.4s;
+}
+
+.fv-bookwrap > .fv-book {
+  pointer-events: auto;
+}
+
+.fv-stage.is-laptop .fv-bookwrap {
+  transform: translateX(var(--fv-lshift, 0px)) scale(var(--fv-lscale, 1));
+}
+
+.fv-stage.fv-laptop-full.is-laptop .fv-bookwrap {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.fv-stage.is-laptop .fv-lastedit {
+  display: none;
 }
 
 .fv-book {
@@ -1906,20 +1926,36 @@
 
 .fv-legend {
   position: absolute;
-  left: 24px;
-  bottom: 118px;
-  min-width: 132px;
-  max-width: 190px;
-  padding: 8px 12px 12px;
-  transform: rotate(-2.2deg);
-  background: linear-gradient(170deg, #fdf1a3, #f8e27d);
-  color: #4a3b17;
-  font-family: var(--fv-hand-font, var(--font-interface));
-  font-size: 15px;
-  line-height: 1.2;
-  box-shadow: 2px 6px 14px rgba(40, 25, 0, 0.35);
-  border-radius: 2px 2px 14px 2px;
-  z-index: 17;
+  left: 18px;
+  top: 92px;
+  width: 168px;
+  padding: 20px 14px 18px;
+  transform: rotate(-2.5deg);
+  transform-origin: 50% 0;
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .55  0 0 0 0 .42  0 0 0 0 .1  0 0 0 .16 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"),
+    linear-gradient(172deg, #fff0a0 0%, #fbe36c 62%, #f4d44f 100%);
+  color: #3d3216;
+  font-family: "FV Caveat", "Segoe Print", "Bradley Hand", cursive;
+  font-size: 19px;
+  line-height: 1.15;
+  border-radius: 1px 1px 3px 3px;
+  box-shadow: 0 1px 1px rgba(60, 40, 0, 0.25), 0 10px 14px -6px rgba(60, 40, 0, 0.45);
+  z-index: 3;
+  transition: transform 0.25s, box-shadow 0.25s;
+}
+
+/* lifted lower-right corner and the shadow it throws, like a note that's been stuck down by its top edge */
+.fv-legend::before {
+  content: "";
+  position: absolute;
+  left: 8%;
+  right: 4%;
+  bottom: 2px;
+  height: 22px;
+  z-index: -1;
+  transform: rotate(2.5deg);
+  box-shadow: 0 14px 12px rgba(50, 30, 0, 0.4);
 }
 
 .fv-legend::after {
@@ -1927,27 +1963,58 @@
   position: absolute;
   right: 0;
   bottom: 0;
-  width: 18px;
-  height: 18px;
-  background: linear-gradient(315deg, transparent 50%, rgba(0, 0, 0, 0.12) 50%);
-  border-radius: 0 0 14px 0;
+  width: 26px;
+  height: 26px;
+  background: linear-gradient(315deg, rgba(0, 0, 0, 0.16) 0%, rgba(0, 0, 0, 0.04) 40%, transparent 50%);
+  border-bottom-right-radius: 3px;
+  pointer-events: none;
+}
+
+.fv-legend:hover,
+.fv-legend.is-dragging {
+  z-index: 20;
 }
 
 .fv-legend.is-dragging {
   cursor: grabbing;
-  box-shadow: 4px 12px 22px rgba(40, 25, 0, 0.4);
+  transform: rotate(-1deg) scale(1.03);
+  box-shadow: 0 2px 2px rgba(60, 40, 0, 0.2), 0 22px 26px -8px rgba(60, 40, 0, 0.5);
+}
+
+.fv-legend-strip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 13px;
+  background: linear-gradient(180deg, rgba(120, 90, 0, 0.16), rgba(120, 90, 0, 0.03));
+  border-bottom: 1px solid rgba(120, 90, 0, 0.12);
+  pointer-events: none;
 }
 
 .fv-legend-title {
+  position: relative;
   cursor: grab;
-  margin: 0 -12px 6px;
-  padding: 0 12px 4px;
-  font-size: 17px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  border-bottom: 1.5px dashed rgba(74, 59, 23, 0.4);
+  margin: 0 0 4px;
+  padding: 0 0 2px;
+  font-size: 25px;
+  line-height: 1;
+  letter-spacing: 0.01em;
   user-select: none;
   touch-action: none;
+  transform: rotate(-1deg);
+}
+
+.fv-legend-title::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 28%;
+  bottom: -2px;
+  height: 0;
+  border-bottom: 2.5px solid rgba(61, 50, 22, 0.55);
+  border-radius: 50%;
+  filter: var(--fv-wobble);
 }
 
 .fv-root .fv-legend-row {
@@ -1955,21 +2022,36 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 2px 0;
+  padding: 1px 0;
   text-align: left;
   font-family: inherit;
   font-size: inherit;
   color: inherit;
+  transform: rotate(var(--tilt, 0deg));
 }
 
 .fv-root .fv-legend-row:hover {
   background: none;
   box-shadow: none;
-  text-decoration: underline;
 }
 
-.fv-root .fv-legend-row.is-active {
+.fv-root .fv-legend-row:hover .fv-legend-label {
+  text-decoration: underline wavy;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.fv-root .fv-legend-row.is-active .fv-legend-label {
   font-weight: 700;
+  -webkit-text-stroke: 0.5px currentColor;
+}
+
+.fv-legend-mark {
+  flex: none;
+  width: 44px;
+  height: 16px;
+  mix-blend-mode: multiply;
+  filter: var(--fv-wobble);
 }
 
 .fv-legend-swatch {
@@ -2318,5 +2400,279 @@
 @media (max-width: 1100px) {
   .fv-root:not(.is-outline-collapsed):not(.is-narrow) .fv-outline {
     width: 210px;
+  }
+}
+
+
+/* ===================================================================== */
+/* Text weight for hairline scripts                                       */
+/* ===================================================================== */
+
+.fv-mode-hand .fv-flow {
+  -webkit-text-stroke: var(--fv-hand-stroke, 0px) currentColor;
+}
+
+/* ===================================================================== */
+/* Ways of turning pages                                                  */
+/* ===================================================================== */
+
+.fv-flip-nav .fv-edge {
+  display: none;
+}
+
+.fv-flip-click.is-book-open .fv-pagebase {
+  cursor: pointer;
+}
+
+.fv-flip-click.is-book-open .fv-flow a,
+.fv-flip-click.is-book-open .fv-flow .fv-hl {
+  cursor: pointer;
+}
+
+.fv-flip-drag .fv-edge {
+  width: 15%;
+  cursor: grab;
+  touch-action: none;
+}
+
+.fv-flip-drag .fv-edge:active {
+  cursor: grabbing;
+}
+
+/* corner peel hint */
+.fv-flip-drag .fv-edge::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  width: 0;
+  height: 0;
+  transition: width 0.25s, height 0.25s;
+}
+
+.fv-flip-drag .fv-edge-right::after {
+  right: 0;
+  background: linear-gradient(225deg, transparent 50%, rgba(0, 0, 0, 0.18) 50%, var(--fv-edge-1) 52%);
+  border-bottom-right-radius: 8px;
+}
+
+.fv-flip-drag .fv-edge-left::after {
+  left: 0;
+  background: linear-gradient(135deg, transparent 50%, rgba(0, 0, 0, 0.18) 50%, var(--fv-edge-1) 52%);
+  border-bottom-left-radius: 8px;
+}
+
+.fv-flip-drag .fv-book.is-open:not(.is-busy) .fv-edge:hover::after {
+  width: 54px;
+  height: 54px;
+}
+
+/* ===================================================================== */
+/* The laptop (external links)                                            */
+/* ===================================================================== */
+
+.fv-laptop-wrap {
+  position: absolute;
+  inset: 76px 0 84px 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 3%;
+  z-index: 6;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.fv-stage.fv-laptop-full .fv-laptop-wrap {
+  justify-content: center;
+  padding-right: 0;
+}
+
+.fv-laptop {
+  --lw: var(--fv-lw, 640px);
+  position: relative;
+  flex: none;
+  width: var(--lw);
+  perspective: 1800px;
+  transform: translateX(125%);
+  transition: transform 0.85s cubic-bezier(0.3, 0.8, 0.25, 1);
+  filter: drop-shadow(0 26px 22px rgba(20, 10, 0, 0.45));
+}
+
+.fv-laptop.is-open {
+  transform: none;
+  pointer-events: auto;
+}
+
+.fv-laptop-lid {
+  position: relative;
+  height: calc(var(--lw) * 0.62);
+  padding: 2.4%;
+  box-sizing: border-box;
+  border-radius: 14px 14px 3px 3px;
+  background: linear-gradient(180deg, #2a2b30, #17171a);
+  box-shadow: inset 0 0 0 1.5px #55575e, 0 0 0 1px #9a9ca3;
+  transform-origin: 50% 100%;
+  transform: rotateX(-96deg);
+  opacity: 0;
+  transition: transform 0.9s cubic-bezier(0.3, 0.9, 0.3, 1) 0.25s, opacity 0.3s 0.25s;
+}
+
+.fv-laptop.is-open .fv-laptop-lid {
+  transform: rotateX(0deg);
+  opacity: 1;
+}
+
+.fv-laptop-screen {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #fff;
+  color: #2a2630;
+}
+
+.fv-laptop-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  background: linear-gradient(180deg, #ecebee, #dddce0);
+  border-bottom: 1px solid #c4c3c8;
+}
+
+.fv-laptop-dots {
+  display: flex;
+  gap: 5px;
+  margin-right: 6px;
+}
+
+.fv-laptop-dots span {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ff5f57;
+}
+
+.fv-laptop-dots span:nth-child(2) {
+  background: #febc2e;
+}
+
+.fv-laptop-dots span:nth-child(3) {
+  background: #28c840;
+}
+
+.fv-laptop-url {
+  flex: 1;
+  min-width: 0;
+  margin: 0 4px;
+  padding: 4px 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px #cfced3;
+  font-size: 12px;
+  color: #55505c;
+}
+
+.fv-root .fv-lap-btn {
+  width: 26px;
+  height: 26px;
+  color: #55505c;
+}
+
+.fv-root .fv-lap-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: #2a2630;
+}
+
+.fv-lap-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.fv-laptop-view {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: #fff;
+}
+
+.fv-laptop-view > iframe,
+.fv-laptop-view > webview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
+}
+
+.fv-laptop-fallback {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 33px;
+  bottom: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  text-align: center;
+  background: #f6f5f8;
+  font-size: 13.5px;
+  color: #55505c;
+}
+
+.fv-laptop-fallback.is-visible {
+  display: flex;
+}
+
+.fv-laptop-cam {
+  position: absolute;
+  left: 50%;
+  top: 0.9%;
+  width: 5px;
+  height: 5px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: #3b3c42;
+}
+
+.fv-laptop-base {
+  position: relative;
+  width: 108%;
+  height: calc(var(--lw) * 0.085);
+  margin: -1px 0 0 -4%;
+  border-radius: 2px 2px 14px 14px / 2px 2px 22px 22px;
+  background: linear-gradient(180deg, #dcdde1 0%, #bfc1c7 55%, #9fa1a8 100%);
+  box-shadow: inset 0 1px 0 #fff, inset 0 -3px 0 rgba(0, 0, 0, 0.12);
+}
+
+.fv-laptop-base::before {
+  content: "";
+  position: absolute;
+  left: 40%;
+  right: 40%;
+  top: 0;
+  height: 4px;
+  border-radius: 0 0 8px 8px;
+  background: linear-gradient(180deg, #9a9ca3, #b4b6bc);
+}
+
+.fv-laptop-keys,
+.fv-laptop-pad {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .fv-laptop-url {
+    font-size: 11px;
   }
 }

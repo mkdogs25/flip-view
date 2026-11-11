@@ -65,6 +65,25 @@ export class ObsidianHost implements NotebookHost {
     void this.plugin.app.workspace.openLinkText(href, sourcePath, newTab ? "split" : "tab");
   }
 
+  resolveLink(href: string, sourcePath: string): { path: string; heading?: string } | null {
+    const hash = href.indexOf("#");
+    const linkPath = hash >= 0 ? href.slice(0, hash) : href;
+    const sub = hash >= 0 ? href.slice(hash + 1) : "";
+    let path: string | null = sourcePath;
+    if (linkPath) path = this.plugin.app.metadataCache.getFirstLinkpathDest(linkPath, sourcePath)?.path ?? null;
+    if (!path) return null;
+    let heading: string | undefined;
+    if (sub && !sub.startsWith("^")) {
+      const last = sub.split("#").pop() ?? "";
+      try {
+        heading = decodeURIComponent(last);
+      } catch {
+        heading = last;
+      }
+    }
+    return { path, heading };
+  }
+
   openExternal(href: string): void {
     window.open(href, "_blank", "noopener");
   }

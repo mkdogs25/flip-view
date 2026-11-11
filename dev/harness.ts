@@ -18,6 +18,7 @@ if (q.get("hfont")) settings.headingFont = q.get("hfont") as FlipViewSettings["h
 if (q.get("color")) settings.coverColor = "#" + q.get("color");
 if (q.get("label")) settings.coverLabel = q.get("label") as FlipViewSettings["coverLabel"];
 if (q.get("sound") === "0") settings.soundEnabled = false;
+if (q.get("flip")) settings.flipMode = q.get("flip") as FlipViewSettings["flipMode"];
 if (q.get("anim")) settings.animation = q.get("anim") as FlipViewSettings["animation"];
 
 const galaxy = `data:image/svg+xml;utf8,${encodeURIComponent(
@@ -57,6 +58,8 @@ def energy(m, c=3e8):
 
 > Probability is not certain!
 
+See also [Thermodynamics](Thermodynamics), the [Garden Plan](<Garden Plan>) in another notebook, [time dilation](<Relativity#Time Dilation>) and an [external page](https://example.com/lesson).
+
 ---
 
 ${LONG}
@@ -65,7 +68,7 @@ ${LONG}
 - [ ] Solve the problem set
 `,
   "Physics/Thermodynamics": `# Thermodynamics\n\nEntropy never decreases in an isolated system. See [[Relativity]] for something else entirely.\n\n| Law | Idea |\n|---|---|\n| First | Energy is conserved |\n| Second | Entropy increases |\n\n\`\`\`python\ndef carnot(t_hot, t_cold):\n    return 1 - t_cold / t_hot\n\`\`\`\n\nSome **bold**, *italic*, ==highlighted== and ~~struck~~ text.`,
-  "Physics/Relativity": `# Relativity\n\nTime is relative.\n\n![galaxy](${galaxy})\n\n${LONG.split("\n\n").slice(0, 4).join("\n\n")}`,
+  "Physics/Relativity": `# Relativity\n\nTime is relative.\n\n${LONG.split("\n\n").slice(0, 7).join("\n\n")}\n\n## Time Dilation\n\nMoving clocks run slow.\n\n![galaxy](${galaxy})\n\n${LONG.split("\n\n").slice(0, 4).join("\n\n")}`,
   "Physics/Optics": "Light bends when it changes medium.\n\n1. Reflection\n2. Refraction\n3. Diffraction",
   "Physics/Fluid Dynamics": "# Fluid Dynamics\n\nWater finds a way.",
   "Projects/The Energy Paradox": `# The Energy Paradox
@@ -131,12 +134,23 @@ const host: NotebookHost = {
     const md = markdownFor(note);
     const x = opts.hand ? extractMath(md) : { md, items: [] };
     el.innerHTML = marked.parse(x.md, { async: false }) as string;
-    el.querySelectorAll("a").forEach((a) => a.classList.add("internal-link"));
+    el.querySelectorAll("a").forEach((a) => {
+      const href = a.getAttribute("href") ?? "";
+      if (!/^https?:/.test(href)) {
+        a.classList.add("internal-link");
+        a.setAttribute("data-href", decodeURIComponent(href));
+      }
+    });
     restoreMath(el, x.items);
     return () => undefined;
   },
   promptText: async (o) => (o.value ? o.value + " (renamed)" : "New Chapter"),
   customiseCover: async () => undefined,
+  resolveLink: (href) => {
+    const [name, heading] = href.split("#");
+    const key = Object.keys(SOURCES).find((k) => k.split("/")[1].toLowerCase() === name.toLowerCase());
+    return key ? { path: key + ".md", heading } : null;
+  },
   openNote: () => undefined,
   openLink: () => undefined,
   openExternal: () => undefined,

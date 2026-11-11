@@ -77,8 +77,12 @@ const ICON_PATHS: Record<string, string> = {
   "trash-2": "M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13",
   "chevron-up": "M5 15l7-7 7 7",
   "chevron-down": "M5 9l7 7 7-7",
+  "refresh-cw": "M20 11a8 8 0 10-2.3 6M20 4v7h-7",
+  "external-link": "M14 4h6v6M20 4l-9 9M18 14v6H4V6h6",
   clock: "M12 3a9 9 0 100 18 9 9 0 000-18zM12 7v5l3 2",
 };
+
+export const Platform = { isDesktopApp: false };
 
 export function setIcon(el: HTMLElement, name: string): void {
   const d = ICON_PATHS[name] ?? "M4 4h16v16H4z";

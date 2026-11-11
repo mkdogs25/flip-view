@@ -82,7 +82,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
       await page.screenshot({ path: `${out}/23-separator.png` });
     },
     async cursive(page) {
-      await page.goto(url("theme=light&mode=handwritten&font=dancing-script&hfont=homemade-apple"));
+      await page.goto(url("theme=light&mode=handwritten&font=alex-brush&hfont=alex-brush"));
       await wait(700);
       await page.click(".fv-cover-front");
       await wait(1900);

@@ -153,6 +153,17 @@ export class FlipViewSettingTab extends PluginSettingTab {
           .onChange((v) => ((s.paperStyle = v as PaperStyle), save())),
       );
     new Setting(containerEl)
+      .setName("Turning pages")
+      .setDesc("Click a page to flip it, pull a page corner to flip it like a real page, or only use the navigation bar under the book. Arrow keys always work.")
+      .addDropdown((d) =>
+        d
+          .addOption("click", "Click a page")
+          .addOption("drag", "Pull the page corner")
+          .addOption("nav", "Navigation bar only")
+          .setValue(s.flipMode)
+          .onChange((v) => ((s.flipMode = v as FlipViewSettings["flipMode"]), save())),
+      );
+    new Setting(containerEl)
       .setName("Animation")
       .addDropdown((d) =>
         d
@@ -179,7 +190,7 @@ export class FlipViewSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Handwriting")
-      .setDesc("Includes joined-up cursive options. Maths and code are written out in the same hand.")
+      .setDesc("Includes joined-up cursive options (Alex Brush is the loopy brush script). Maths and code are written out in the same hand.")
       .addDropdown((d) => {
         HAND_FONTS.forEach((f) => d.addOption(f.id, f.label));
         d.setValue(s.handFont).onChange((v) => ((s.handFont = v as HandFont), save()));
@@ -196,7 +207,7 @@ export class FlipViewSettingTab extends PluginSettingTab {
       d.addOption("smallcaps", "Small caps").addOption("normal", "Normal").addOption("uppercase", "UPPERCASE");
     new Setting(containerEl)
       .setName("Heading case")
-      .setDesc("Small caps by default.")
+      .setDesc("Small caps by default. Cursive heading fonts stay in normal case, since small caps hurt legibility on script.")
       .addDropdown((d) => caseOptions(d).setValue(s.headingCase).onChange((v) => ((s.headingCase = v as TextCase), save())));
     new Setting(containerEl)
       .setName("Body text case")

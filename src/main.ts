@@ -74,6 +74,10 @@ export default class FlipViewPlugin extends Plugin {
       (this.settings as unknown as Record<string, unknown>)[k] = { ...(base[k] as object), ...((saved?.[k] as object | undefined) ?? {}) };
     }
     if (!Array.isArray(this.settings.highlighters)) this.settings.highlighters = base.highlighters;
+    // Homemade Apple was replaced by Alex Brush
+    const legacy = "homemade-apple" as string;
+    if ((this.settings.handFont as string) === legacy) this.settings.handFont = "alex-brush";
+    if ((this.settings.headingFont as string) === legacy) this.settings.headingFont = "alex-brush";
   }
 
   /** Persists settings and refreshes every open notebook view. */

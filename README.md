@@ -15,6 +15,8 @@ in 3D; turn pages to read your notes either as **handwriting** or as **formatted
 - **Outline panel** on the right: reorder notes by dragging, add **separator pages** between notes, jump to headings and highlights.
 - **Handwriting extras:** cursive fonts, small-caps handwritten headings (configurable), maths and code written out by hand, and on ruled/grid/dotted paper words sit on the line.
 - **Highlighters** on the desk (any number, any colour) with a draggable sticky-note **legend**. Highlights are saved per note.
+- **Links work inside the book:** a link to a note flips to it (or moves to that note's notebook); a web link opens on a laptop on the desk while the notebook slides aside. Ctrl/Cmd-click opens the real note or your browser instead.
+- **Choose how pages turn:** click a page, pull a page corner (drag it like a real page), or use only the navigation bar.
 - **Sound effects** (synthesised, adjustable or off): page flips, cover open/close, pen clicks, marker squeaks.
 - **Rename notebooks** without touching your folders or properties, and pick a cover style, colour and label per notebook (leather, plain cloth, kraft, gradient, watercolour, terrazzo, waves, ...).
 - Contents list, keyboard navigation (←/→, Esc), full-screen mode, "last edited" badge, live updates when notes change.
@@ -65,5 +67,6 @@ node dev/shots.cjs     # needs Playwright; writes screenshots to dev/shots
 ## Notes and limits
 
 - Pages are laid out with CSS columns, so long notes paginate automatically. Embeds that load lazily (some plugins' code blocks) may need a moment; edit/save a note to re-render it.
+- The laptop uses Obsidian's embedded browser (an isolated session) on desktop and an iframe elsewhere. Sites that refuse to be embedded show a note with an "Open in your browser" button.
 - On narrow panes the sidebar becomes an overlay, but the two-page spread simply scales down. It is best on desktop-size panes.
 - Fonts (Caveat, Kalam, Patrick Hand, Reenie Beanie, Indie Flower, Shadows Into Light, Playfair Display) are bundled under the SIL Open Font License (see `assets/fonts/LICENSE-OFL.txt`).

@@ -90,6 +90,7 @@ export class NotebookApp {
       modeChanged: (mode) => this.setMode(mode),
       customiseCover: (nb) => void this.customiseCover(nb),
       stateChanged: () => this.refreshOutline(),
+      followInternal: (href, source) => void this.followInternal(href, source),
     });
     this.empty = this.stage.el.createDiv({ cls: "fv-empty" });
 
@@ -182,6 +183,7 @@ export class NotebookApp {
     s.accentColor ? r.setProperty("--fv-accent-user", s.accentColor) : r.removeProperty("--fv-accent-user");
     s.textFont.trim() ? r.setProperty("--fv-text-font", s.textFont) : r.removeProperty("--fv-text-font");
     r.setProperty("--fv-desk-img", `url("${dark ? deskDark : deskLight}")`);
+    r.setProperty("--fv-hand-stroke", `${font.stroke ?? 0}px`);
     this.displace.setAttribute("scale", String(1 + (s.messiness / 100) * 4));
     this.stage.applySettings();
     this.renderList();
@@ -304,6 +306,33 @@ export class NotebookApp {
     else this.host.settings.notebookNames[nb.id] = name;
     this.host.saveSettings();
     this.reload();
+  }
+
+  /** An internal link was clicked: flip to the note if it is in this notebook, else move to its notebook, else open it normally. */
+  private async followInternal(href: string, source: string): Promise<void> {
+    const hit = this.host.resolveLink(href, source);
+    if (!hit) {
+      this.host.openLink(href, source, false);
+      return;
+    }
+    const cur = this.stage.currentNotebook();
+    const here = cur ? cur.notes.findIndex((n) => n.path === hit.path) : -1;
+    if (cur && here >= 0) {
+      await this.stage.goTo(here, hit.heading);
+      return;
+    }
+    const other = this.notebooks.find((nb) => nb.notes.some((n) => n.path === hit.path));
+    if (!other) {
+      this.host.openLink(href, source, false);
+      return;
+    }
+    if (this.stage.isBookOpen()) await this.stage.close();
+    this.select(other.id);
+    await new Promise((r) => window.setTimeout(r, 140)); // let the new cover appear
+    await this.stage.goTo(
+      other.notes.findIndex((n) => n.path === hit.path),
+      hit.heading,
+    );
   }
 
   private async customiseCover(nb: Notebook): Promise<void> {

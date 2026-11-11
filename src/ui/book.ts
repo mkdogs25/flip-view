@@ -6,6 +6,7 @@ import { Sfx } from "../render/sound";
 import { Highlight, Notebook, NotebookHost, ViewMode, isSeparator, realNoteCount } from "../types";
 import { clamp, hashString } from "../util/rng";
 import { formatDate, iconButton } from "./dom";
+import { Laptop } from "./laptop";
 import { Heading, LayoutConfig, LayoutEngine, NoteLayout } from "./layout";
 
 export interface StageCallbacks {
@@ -16,6 +17,8 @@ export interface StageCallbacks {
   customiseCover(nb: Notebook): void;
   /** Open/closed state, current note or page changed. */
   stateChanged(): void;
+  /** The user clicked an internal link inside a page. */
+  followInternal(href: string, sourcePath: string): void;
 }
 
 function penCursor(color: string): string {
@@ -51,6 +54,8 @@ export class BookStage {
   private btnCover: HTMLButtonElement;
   private btnOpenNote: HTMLButtonElement;
   private tray: HTMLElement;
+  private laptop: Laptop;
+  private drag: { update(x: number): void; release(): void } | null = null;
   private legend: HTMLElement;
   private sfx: Sfx;
   private activePen: number | null = null;
@@ -126,9 +131,15 @@ export class BookStage {
     this.coverFront.createDiv({ cls: "fv-shade" });
     this.coverBack = this.cover.createDiv({ cls: "fv-cover-face fv-cover-back" });
     this.coverBack.createDiv({ cls: "fv-shade" });
-    this.book.createDiv({ cls: "fv-edge fv-edge-left" }).addEventListener("click", () => void this.prev());
-    this.book.createDiv({ cls: "fv-edge fv-edge-right" }).addEventListener("click", () => void this.next());
+    const edgeL = this.book.createDiv({ cls: "fv-edge fv-edge-left" });
+    const edgeR = this.book.createDiv({ cls: "fv-edge fv-edge-right" });
+    edgeL.addEventListener("click", () => this.host.settings.flipMode === "click" && void this.prev());
+    edgeR.addEventListener("click", () => this.host.settings.flipMode === "click" && void this.next());
+    edgeL.addEventListener("pointerdown", (e) => this.onEdgeDown(e, false));
+    edgeR.addEventListener("pointerdown", (e) => this.onEdgeDown(e, true));
     this.measure = this.wrap.createDiv({ cls: "fv-measure fv-page-inner" });
+    const lapWrap = this.el.createDiv({ cls: "fv-laptop-wrap" });
+    this.laptop = new Laptop(lapWrap, { close: () => this.closeLaptop(), openExternal: (u) => this.host.openExternal(u) });
     this.spinner = this.wrap.createDiv({ cls: "fv-spinner" });
 
     this.coverFront.addEventListener("click", () => void this.open());
@@ -330,7 +341,8 @@ export class BookStage {
         void this.prev();
         return true;
       case "Escape":
-        if (this.activePen !== null) this.selectPen(null);
+        if (this.laptop.isOpen) this.closeLaptop();
+        else if (this.activePen !== null) this.selectPen(null);
         else if (this.toc.hasClass("is-open")) this.toc.removeClass("is-open");
         else if (this.isOpen) void this.close();
         else return false;
@@ -351,12 +363,15 @@ export class BookStage {
     const head = s.headingFont === "same" ? body : handFontInfo(s.headingFont);
     this.el.style.setProperty("--fv-heading-font", `"${head.family}", "Segoe Print", "Bradley Hand", cursive`);
     this.el.style.setProperty("--fv-hscale", String(head.size / body.size));
+    // small caps on a swash script is hard to read, so cursive headings stay in normal case
+    const headingCase = head.cursive && s.headingCase === "smallcaps" ? "normal" : s.headingCase;
     for (const c of ["smallcaps", "normal", "uppercase"]) {
-      this.el.toggleClass(`fv-hc-${c}`, s.headingCase === c);
+      this.el.toggleClass(`fv-hc-${c}`, headingCase === c);
       this.el.toggleClass(`fv-bc-${c}`, s.bodyCase === c);
     }
     for (const l of ["plate", "foil", "sticker"]) this.el.toggleClass(`fv-label-${l}`, s.coverLabel === l);
     this.el.toggleClass("fv-no-band", !s.coverBand);
+    for (const m of ["click", "drag", "nav"]) this.el.toggleClass(`fv-flip-${m}`, s.flipMode === m);
     this.measureSizes();
     this.renderTools();
     if (this.notebook) this.renderCover();
@@ -372,6 +387,7 @@ export class BookStage {
   destroy(): void {
     this.destroyed = true;
     document.removeEventListener("pointerup", this.onPointerUp);
+    this.laptop.destroy();
     this.ro.disconnect();
     window.clearTimeout(this.resizeTimer);
     this.engine.invalidate();
@@ -467,6 +483,7 @@ export class BookStage {
     st.setProperty("--fv-shift", `${-pw / 2}px`);
     this.metrics = { pw, ph, shift: -pw / 2 };
     this.placeLegend();
+    this.updateLaptopLayout();
   }
 
   private layoutConfig(): LayoutConfig {
@@ -568,26 +585,7 @@ export class BookStage {
       }
 
       this.sfx.pageTurn(d);
-      const leaf = this.book.createDiv({ cls: `fv-leaf ${forward ? "fv-leaf-next" : "fv-leaf-prev"}` });
-      const front = leaf.createDiv({ cls: "fv-leaf-face fv-face-front" });
-      const back = leaf.createDiv({ cls: "fv-leaf-face fv-face-back" });
-      front.createDiv({ cls: "fv-shade" });
-      back.createDiv({ cls: "fv-shade" });
-      const cast = this.book.createDiv({ cls: `fv-cast ${forward ? "fv-cast-right" : "fv-cast-left"}` });
-
-      let landed: HTMLElement;
-      if (forward) {
-        this.rightBase.replaceChildren(target.pageEl(spread * 2 + 1, "right"));
-        front.prepend(cur.pageEl(curSpread * 2 + 1, "right"));
-        landed = target.pageEl(spread * 2, "left");
-        back.prepend(landed);
-      } else {
-        this.leftBase.replaceChildren(target.pageEl(spread * 2, "left"));
-        front.prepend(cur.pageEl(curSpread * 2, "left"));
-        landed = target.pageEl(spread * 2 + 1, "right");
-        back.prepend(landed);
-      }
-      const sign = forward ? -1 : 1;
+      const { leaf, front, back, cast, land, sign } = this.makeLeaf(forward, target, spread);
       await this.animate(
         [
           [leaf, [{ transform: "rotateY(0deg)" }, { transform: `rotateY(${180 * sign}deg)` }], { duration: d, easing: EASE_PAGE }],
@@ -596,7 +594,7 @@ export class BookStage {
           [cast, [{ opacity: 0 }, { opacity: 0.7, offset: 0.5 }, { opacity: 0 }], { duration: d, easing: "ease-in-out" }],
         ],
         () => {
-          (forward ? this.leftBase : this.rightBase).replaceChildren(landed);
+          land();
           leaf.remove();
           cast.remove();
         },
@@ -615,24 +613,239 @@ export class BookStage {
     }
   }
 
+  /** Builds the turning leaf (faces, shading) and swaps the page underneath, ready to be rotated. */
+  private makeLeaf(forward: boolean, target: NoteLayout, spread: number) {
+    const cur = this.layout as NoteLayout;
+    const curSpread = this.spread;
+    const leaf = this.book.createDiv({ cls: `fv-leaf ${forward ? "fv-leaf-next" : "fv-leaf-prev"}` });
+    const front = leaf.createDiv({ cls: "fv-leaf-face fv-face-front" });
+    const back = leaf.createDiv({ cls: "fv-leaf-face fv-face-back" });
+    front.createDiv({ cls: "fv-shade" });
+    back.createDiv({ cls: "fv-shade" });
+    const cast = this.book.createDiv({ cls: `fv-cast ${forward ? "fv-cast-right" : "fv-cast-left"}` });
+    let land: () => void;
+    let undo: () => void;
+    if (forward) {
+      const old = this.rightBase.firstElementChild;
+      this.rightBase.replaceChildren(target.pageEl(spread * 2 + 1, "right"));
+      front.prepend(cur.pageEl(curSpread * 2 + 1, "right"));
+      const landed = target.pageEl(spread * 2, "left");
+      back.prepend(landed);
+      land = () => this.leftBase.replaceChildren(landed);
+      undo = () => old && this.rightBase.replaceChildren(old);
+    } else {
+      const old = this.leftBase.firstElementChild;
+      this.leftBase.replaceChildren(target.pageEl(spread * 2, "left"));
+      front.prepend(cur.pageEl(curSpread * 2, "left"));
+      const landed = target.pageEl(spread * 2 + 1, "right");
+      back.prepend(landed);
+      land = () => this.rightBase.replaceChildren(landed);
+      undo = () => old && this.leftBase.replaceChildren(old);
+    }
+    return { leaf, front, back, cast, land, undo, sign: forward ? -1 : 1 };
+  }
+
+  /* ------------------------------------------------ pulling a page to flip */
+
+  private onEdgeDown(e: PointerEvent, forward: boolean): void {
+    if (e.button !== 0 || this.busy || this.activePen !== null || this.host.settings.flipMode !== "drag") return;
+    e.preventDefault();
+    const startX = e.clientX;
+    let x = startX;
+    let moved = false;
+    let released = false;
+    const onMove = (ev: PointerEvent) => {
+      x = ev.clientX;
+      if (!moved && Math.abs(x - startX) > 6) {
+        moved = true;
+        void this.startDrag(forward, startX, () => x, () => released);
+      }
+      this.drag?.update(x);
+    };
+    const onUp = () => {
+      released = true;
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      document.removeEventListener("pointercancel", onUp);
+      if (!moved) void (forward ? this.next() : this.prev());
+      else this.drag?.release();
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+    document.addEventListener("pointercancel", onUp);
+  }
+
+  private async startDrag(forward: boolean, startX: number, currentX: () => number, isReleased: () => boolean): Promise<void> {
+    if (this.busy || !this.isOpen || !this.notebook || !this.layout) return;
+    let tNote = this.noteIdx;
+    let tSpread = this.spread + (forward ? 1 : -1);
+    if (tSpread >= this.layout.spreads || tSpread < 0) {
+      tNote += forward ? 1 : -1;
+      tSpread = forward ? 0 : Number.MAX_SAFE_INTEGER;
+    }
+    if (tNote < 0 || tNote >= this.notebook.notes.length) return;
+    this.busy = true;
+    this.book.addClass("is-busy");
+    this.toc.removeClass("is-open");
+    let parts: ReturnType<BookStage["makeLeaf"]> | null = null;
+    try {
+      const target = await this.getLayout(tNote);
+      const spread = clamp(tSpread, 0, target.spreads - 1);
+      parts = this.makeLeaf(forward, target, spread);
+      const p = parts;
+      const pw = this.metrics.pw;
+      let progress = 0;
+      const apply = (x: number) => {
+        const dx = forward ? startX - x : x - startX;
+        progress = clamp(dx / (pw * 1.5), 0, 1);
+        p.leaf.style.transform = `rotateY(${p.sign * 180 * progress}deg)`;
+        this.shadeOf(p.front).style.opacity = String(progress * 0.55);
+        this.shadeOf(p.back).style.opacity = String((1 - progress) * 0.55);
+        p.cast.style.opacity = String(Math.sin(progress * Math.PI) * 0.7);
+      };
+      apply(currentX());
+      await new Promise<void>((resolve) => {
+        let done = false;
+        const finish = () => {
+          if (done) return;
+          done = true;
+          this.drag = null;
+          resolve();
+        };
+        this.drag = { update: apply, release: finish };
+        if (isReleased()) finish();
+      });
+      const complete = progress > 0.35;
+      const from = p.sign * 180 * progress;
+      const to = complete ? p.sign * 180 : 0;
+      const d = this.dur(650) * Math.max(0.3, complete ? 1 - progress : progress);
+      if (complete) this.sfx.pageTurn(d * 1.4);
+      if (d > 0) {
+        p.leaf.animate([{ transform: `rotateY(${from}deg)` }, { transform: `rotateY(${to}deg)` }], { duration: d, easing: "ease-out", fill: "both" });
+        this.shadeOf(p.front).style.transition = `opacity ${d}ms`;
+        this.shadeOf(p.back).style.transition = `opacity ${d}ms`;
+        this.shadeOf(p.front).style.opacity = complete ? "0.55" : "0";
+        this.shadeOf(p.back).style.opacity = complete ? "0" : "0.55";
+        p.cast.style.transition = `opacity ${d}ms`;
+        p.cast.style.opacity = "0";
+        await new Promise((r) => window.setTimeout(r, d));
+      }
+      if (complete) {
+        p.land();
+        this.layout = target;
+        this.noteIdx = tNote;
+        this.spread = spread;
+      } else {
+        p.undo();
+      }
+    } catch (err) {
+      console.error("[flip-view] drag turn failed", err);
+      parts?.undo();
+    } finally {
+      this.drag = null;
+      this.book.querySelectorAll(".fv-leaf, .fv-cast").forEach((n) => n.remove());
+      this.busy = false;
+      this.book.removeClass("is-busy");
+      this.updateChrome();
+      this.flushPending();
+    }
+  }
+
+  /* ------------------------------------------------------------ the laptop */
+
+  private showLaptop(url: string): void {
+    this.laptop.open(url);
+    this.el.addClass("is-laptop");
+    this.updateLaptopLayout();
+    this.sfx.pen(true);
+  }
+
+  private closeLaptop(): void {
+    this.laptop.close();
+    this.el.removeClass("is-laptop");
+    this.updateLaptopLayout();
+  }
+
+  /** Sizes the laptop and works out how far (and how small) the notebook shifts to make room for it. */
+  private updateLaptopLayout(): void {
+    const r = this.el.getBoundingClientRect();
+    if (r.width === 0) return;
+    const full = r.width < 700;
+    const availH = r.height - 76 - 84 - 10;
+    let lw = full ? r.width * 0.94 : Math.min(r.width * 0.5, 880);
+    lw = Math.max(280, Math.min(lw, availH / 0.72));
+    const space = Math.max(120, r.width - lw * 0.92 - r.width * 0.03 - 12); // the laptop may overlap the book a little
+    const bookW = this.isOpen ? this.metrics.pw * 2 : this.metrics.pw;
+    const scale = clamp((space - 16) / bookW, 0.4, 1);
+    const shift = space / 2 + 6 - r.width / 2;
+    const st = this.el.style;
+    st.setProperty("--fv-lw", `${lw}px`);
+    st.setProperty("--fv-lscale", String(scale));
+    st.setProperty("--fv-lshift", `${shift}px`);
+    this.el.toggleClass("fv-laptop-full", full);
+  }
+
+  /* ------------------------------------------------------------ following links */
+
+  /** Jumps to a note (and optionally one of its headings) in this notebook, opening the book if needed. */
+  async goTo(idx: number, heading?: string): Promise<void> {
+    if (!this.notebook || idx < 0 || idx >= this.notebook.notes.length) return;
+    let page = 0;
+    if (heading) {
+      const layout = await this.getLayout(idx);
+      const norm = (t: string) => t.trim().toLowerCase();
+      const hit = layout.headings.find((h) => norm(h.text) === norm(heading));
+      if (hit) page = hit.page;
+    }
+    const spread = Math.floor(page / 2);
+    if (!this.isOpen) {
+      await this.open(idx);
+      if (spread > 0) await this.turnTo(idx, spread);
+    } else {
+      await this.turnTo(idx, spread);
+    }
+  }
+
   private onPageClick(e: MouseEvent): void {
-    const hl = (e.target as HTMLElement).closest<HTMLElement>(".fv-hl");
+    const target = e.target as HTMLElement;
+    const hl = target.closest<HTMLElement>(".fv-hl");
     if (hl && this.activePen !== null && window.getSelection()?.isCollapsed !== false) {
       e.preventDefault();
       if (hl.dataset.hl) this.removeHighlight(hl.dataset.hl);
       return;
     }
-    const a = (e.target as HTMLElement).closest("a");
-    if (!a) return;
+    const a = target.closest("a");
+    if (!a) {
+      this.maybeFlipOnClick(e, target);
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     const href = a.getAttribute("data-href") ?? a.getAttribute("href");
     if (!href) return;
+    const source = this.currentNote()?.path ?? "";
     const newTab = e.ctrlKey || e.metaKey;
-    if (a.classList.contains("internal-link")) this.host.openLink(href, this.currentNote()?.path ?? "", newTab);
-    else if (/^[a-z][a-z0-9+.-]*:/i.test(href)) this.host.openExternal(href);
-    else if (href.startsWith("#")) return;
-    else this.host.openLink(href, this.currentNote()?.path ?? "", newTab);
+    const isUrl = /^[a-z][a-z0-9+.-]*:/i.test(href);
+    if (isUrl) {
+      if (/^https?:/i.test(href) && !newTab) this.showLaptop(href);
+      else this.host.openExternal(href);
+    } else if (newTab) {
+      this.host.openLink(href, source, true);
+    } else if (href.startsWith("#")) {
+      const i = this.noteIdx;
+      void this.goTo(i, href.slice(1).split("#").pop());
+    } else {
+      this.cb.followInternal(href, source);
+    }
+  }
+
+  /** "Click a page" mode: the left page goes back, the right page goes forward. */
+  private maybeFlipOnClick(e: MouseEvent, target: HTMLElement): void {
+    if (this.host.settings.flipMode !== "click" || !this.isOpen || this.busy || this.activePen !== null) return;
+    if (e.detail > 1 || window.getSelection()?.isCollapsed === false) return;
+    if (target.closest("input, button, summary, textarea, select, .fv-edge, .fv-sep-tab")) return;
+    const r = this.book.getBoundingClientRect();
+    void (e.clientX < r.left + r.width / 2 ? this.prev() : this.next());
   }
 
   private countLabel(): string {
@@ -720,6 +933,7 @@ export class BookStage {
       this.btnPrev.setAttr("aria-label", this.noteIdx === 0 && this.spread === 0 ? "Close notebook" : "Previous page");
     }
     this.cover.toggleClass("is-empty", !nb || nb.notes.length === 0);
+    this.updateLaptopLayout();
     this.cb.stateChanged();
   }
 
@@ -809,16 +1023,38 @@ export class BookStage {
     const show = s.showLegend && n > 0;
     this.legend.toggleClass("is-hidden", !show);
     if (!show) return;
+    this.legend.createDiv({ cls: "fv-legend-strip" });
     const grip = this.legend.createDiv({ cls: "fv-legend-title", text: "Legend" });
     grip.addEventListener("pointerdown", (e) => this.dragLegend(e));
     s.highlighters.forEach((p, i) => {
       const row = this.legend.createEl("button", { cls: "fv-legend-row", attr: { type: "button" } });
       row.toggleClass("is-active", i === this.activePen);
-      row.createSpan({ cls: "fv-legend-swatch" }).style.setProperty("--pen", p.color);
+      row.style.setProperty("--tilt", `${((i * 5 + 3) % 5) - 2}deg`);
+      row.appendChild(this.scribble(p.color, i));
       row.createSpan({ cls: "fv-legend-label", text: p.label || p.color });
       row.addEventListener("click", () => this.selectPen(i));
     });
     this.placeLegend();
+  }
+
+  /** A hand-drawn marker stroke in the pen's colour, a little different for each row. */
+  private scribble(color: string, i: number): SVGElement {
+    const ns = "http://www.w3.org/2000/svg";
+    const j = (n: number) => ((i * 7 + n * 13) % 5) - 2;
+    const svg = document.createElementNS(ns, "svg");
+    svg.setAttribute("viewBox", "0 0 44 16");
+    svg.setAttribute("width", "44");
+    svg.setAttribute("height", "16");
+    svg.classList.add("fv-legend-mark");
+    const path = document.createElementNS(ns, "path");
+    path.setAttribute("d", `M4 ${6 + j(1)} Q 20 ${3 + j(2)} 40 ${6 + j(3)} M5 ${10 + j(4)} Q 24 ${13 + j(5)} 39 ${9 + j(6)}`);
+    path.setAttribute("fill", "none");
+    path.setAttribute("stroke", color);
+    path.setAttribute("stroke-width", "7");
+    path.setAttribute("stroke-linecap", "round");
+    path.setAttribute("opacity", "0.9");
+    svg.appendChild(path);
+    return svg;
   }
 
   private placeLegend(): void {

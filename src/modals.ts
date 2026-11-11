@@ -44,6 +44,8 @@ export class HelpModal extends Modal {
       "Pick a notebook on the left, then click its cover to flip it open.",
       "Turn pages with the arrow keys, the page edges, or the arrows under the book. Turning back past the first page closes the notebook.",
       "Switch between Handwritten and Text at the top. Text uses your own note font; handwriting is generated from the same text.",
+      "Links in your notes work inside the book: a link to another note flips to it (or moves to its notebook), and a web link opens on a laptop on the desk. Ctrl/Cmd-click opens the real note or your browser.",
+      "Choose how pages turn in settings: click a page, pull its corner, or use only the navigation bar.",
       "The list button under the book jumps to any note. The page icon opens the note itself.",
       "Click the dice on a closed notebook to shuffle its cover. Covers are generated randomly per notebook, with no AI involved.",
       "The outline on the right lists the notebook's notes. Drag rows (or use the arrows) to reorder them, and add separator pages between notes. Headings and highlights of the open note are listed under it.",
