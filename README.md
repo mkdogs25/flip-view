@@ -26,15 +26,18 @@ BRAT installs from GitHub releases, so a release must exist (see below).
 
 ### Publishing a release (maintainers)
 
-Bump `version` in `manifest.json` (and `versions.json`), commit, then push a tag with exactly that version:
+Releases are automatic. Every push to `main` runs the `Release` workflow, which builds the plugin and, if the
+version in `manifest.json` has no release yet, publishes one with `main.js`, `manifest.json` and `styles.css` attached.
+
+To ship new changes:
 
 ```bash
-git tag 0.1.0
-git push origin 0.1.0
+npm run bump          # patch; or: npm run bump minor | major | 1.2.3
+git commit -am "Release x.y.z" && git push
 ```
 
-The `Release` workflow builds the plugin and attaches `main.js`, `manifest.json` and `styles.css` to a GitHub release.
-Tags containing a hyphen (e.g. `0.2.0-beta.1`) are marked as pre-releases.
+Pushes that don't change the version still build and test the plugin but don't create a release. Versions with a
+hyphen (e.g. `0.2.0-beta.1`) are published as pre-releases.
 
 ## Install (manual)
 
