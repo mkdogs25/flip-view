@@ -16,6 +16,26 @@ in 3D; turn pages to read your notes either as **handwriting** or as **formatted
 
 Commands: *Open notebook view*, *Show current note in its notebook*, *Toggle handwritten / text preview*.
 
+## Install with BRAT
+
+1. Install and enable **BRAT** (Obsidian42 - BRAT) from Community plugins.
+2. Run *BRAT: Add a beta plugin for testing* and enter `mkdogs25/flip-view`.
+3. Enable **Flip View** under Community plugins. BRAT will keep it updated.
+
+BRAT installs from GitHub releases, so a release must exist (see below).
+
+### Publishing a release (maintainers)
+
+Bump `version` in `manifest.json` (and `versions.json`), commit, then push a tag with exactly that version:
+
+```bash
+git tag 0.1.0
+git push origin 0.1.0
+```
+
+The `Release` workflow builds the plugin and attaches `main.js`, `manifest.json` and `styles.css` to a GitHub release.
+Tags containing a hyphen (e.g. `0.2.0-beta.1`) are marked as pre-releases.
+
 ## Install (manual)
 
 ```bash
