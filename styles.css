@@ -5981,3 +5981,22 @@
 .fv-root.fv-dark .fv-editor-btn:not(.mod-cta) {
   background: rgba(255, 255, 255, 0.08);
 }
+
+/* no mug: the highlighters rest loose on the desk */
+.fv-root .fv-cup-hl .fv-cup-body,
+.fv-root .fv-cup-hl .fv-cup-body::before,
+.fv-root .fv-cup-hl .fv-cup-body::after,
+.fv-cup-hl::after {
+  display: none;
+}
+
+.fv-root .fv-cup-hl .fv-tray {
+  transform: rotate(-82deg);
+  transform-origin: 30% 80%;
+  bottom: 0;
+}
+
+.fv-root .fv-cup-hl .fv-tray {
+  left: 150px;
+  bottom: 20px;
+}
