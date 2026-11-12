@@ -49,7 +49,10 @@ export class InfoPanel {
     const who = top.createDiv({ cls: "fv-info-who" });
     who.createDiv({ cls: "fv-info-name", text: nb.name });
     const n = realNoteCount(nb);
-    who.createDiv({ cls: "fv-info-sub", text: `${n} ${n === 1 ? "note" : "notes"}${s.trackProgress && prog.total ? ` • ${Math.round(prog.frac * 100)}% read` : ""}` });
+    const chars = nb.notes.reduce((t, x) => t + (x.size ?? 0), 0);
+    const mins = Math.round(chars / 6 / 220); // ~6 characters a word, ~220 words a minute
+    const time = mins >= 1 ? ` • ~${mins >= 90 ? `${(mins / 60).toFixed(1)} h` : `${mins} min`} to read` : "";
+    who.createDiv({ cls: "fv-info-sub", text: `${n} ${n === 1 ? "note" : "notes"}${s.trackProgress && prog.total ? ` • ${Math.round(prog.frac * 100)}% read` : ""}${time}` });
 
     const meta = this.el.createDiv({ cls: "fv-info-meta" });
     const row = (icon: string, label: string, value: string) => {

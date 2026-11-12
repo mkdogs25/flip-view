@@ -191,6 +191,18 @@ export interface FlipViewSettings {
   shelfHidden: boolean;
   /** Which side of the desk the pens, highlighters and tools sit on. */
   toolsSide: "left" | "right";
+  /** Keep the pages light even when the app is in dark mode. */
+  lightPagesInDark: boolean;
+  /** Page margins as a percentage of the default (100 = as designed). */
+  marginTop: number;
+  marginBottom: number;
+  marginInner: number;
+  marginOuter: number;
+  /** Turn pages with the mouse wheel over the book. */
+  wheelFlip: boolean;
+  /** Reopen the notebook and page you were last reading when the view opens. */
+  resumeReading: boolean;
+  lastPosition: { nb: string; path: string; spread: number } | null;
   /** Two one-page notes in a row share a spread instead of each leaving a blank facing page. */
   packShortNotes: boolean;
   /** How far the notebook leans back on the desk, in degrees (0 = flat on, 17 = default). */
@@ -309,6 +321,14 @@ export const DEFAULT_SETTINGS: FlipViewSettings = {
   stripCollapsed: false,
   shelfHidden: false,
   toolsSide: "right",
+  lightPagesInDark: false,
+  marginTop: 100,
+  marginBottom: 100,
+  marginInner: 100,
+  marginOuter: 100,
+  wheelFlip: false,
+  resumeReading: false,
+  lastPosition: null,
   packShortNotes: true,
   bookTilt: 17,
   infoCollapsed: false,

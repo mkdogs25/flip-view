@@ -6327,3 +6327,79 @@
   top: auto;
   bottom: 0;
 }
+
+/* ===================================================================== */
+/* Light pages in dark mode                                               */
+/* ===================================================================== */
+
+.fv-root.fv-dark .fv-stage.fv-lightpages {
+  --fv-paper: #f8efdc;
+  --fv-paper-2: #efe3c9;
+  --fv-edge-1: #f1e7d0;
+  --fv-edge-2: #d8caa7;
+  --fv-text: #37313f;
+  --fv-text-muted: #6d6678;
+  --fv-ink: var(--fv-ink-user, #27254a);
+  --fv-line: rgba(100, 120, 180, 0.3);
+  --fv-accent-text: var(--fv-accent);
+  --fv-grain-blend: multiply;
+  --fv-grain-opacity: 0.55;
+}
+
+.fv-root.fv-dark .fv-stage.fv-lightpages.fv-pc-white { --fv-paper: #fcfbf7; }
+.fv-root.fv-dark .fv-stage.fv-lightpages.fv-pc-ivory { --fv-paper: #f5f0e1; }
+.fv-root.fv-dark .fv-stage.fv-lightpages.fv-pc-yellow { --fv-paper: #f7ecae; }
+.fv-root.fv-dark .fv-stage.fv-lightpages.fv-pc-grey { --fv-paper: #e9e8e6; }
+.fv-root.fv-dark .fv-stage.fv-lightpages.fv-pc-blue { --fv-paper: #dfe9f5; }
+.fv-root.fv-dark .fv-stage.fv-lightpages.fv-pc-sepia { --fv-paper: #eadcc0; }
+.fv-root.fv-dark .fv-stage.fv-lightpages.fv-pc-custom { --fv-paper: var(--fv-paper-custom, #f4ead2); }
+
+.fv-root.fv-dark .fv-stage.fv-lightpages .fv-page-left::after {
+  background: linear-gradient(to right, transparent, rgba(40, 24, 4, 0.2));
+}
+
+.fv-root.fv-dark .fv-stage.fv-lightpages .fv-page-right::after {
+  background: linear-gradient(to left, transparent, rgba(40, 24, 4, 0.2));
+}
+
+.fv-root.fv-dark .fv-stage.fv-lightpages .fv-hl {
+  background: linear-gradient(transparent 14%, color-mix(in srgb, var(--hl) 62%, transparent) 14%, color-mix(in srgb, var(--hl) 62%, transparent) 90%, transparent 90%);
+}
+
+/* ===================================================================== */
+/* Leaving the laptop                                                     */
+/* ===================================================================== */
+
+.fv-laptop-exit {
+  position: absolute;
+  left: 50%;
+  bottom: 84px;
+  z-index: 30;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px 9px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--fv-glass-border);
+  color: var(--fv-glass-text);
+  font-size: 13px;
+  cursor: pointer;
+  transform: translateX(-50%);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
+}
+
+.fv-laptop-exit:hover {
+  background: color-mix(in srgb, var(--fv-accent) 28%, var(--fv-glass-bg));
+}
+
+.fv-laptop-exit-icon {
+  display: inline-flex;
+}
+
+.fv-stage.is-laptop .fv-laptop-exit {
+  display: inline-flex;
+}
+
+.fv-stage.is-laptop .fv-bookwrap {
+  cursor: pointer;
+}

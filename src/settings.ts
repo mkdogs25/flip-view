@@ -118,6 +118,27 @@ export class FlipViewSettingTab extends PluginSettingTab {
       .setDesc("Two one-page notes in a row share a spread, instead of each leaving a blank page beside it. The second note's page is read-only for ink and highlights; open the note on its own to mark it up.")
       .addToggle((t) => t.setValue(s.packShortNotes).onChange((v) => ((s.packShortNotes = v), save())));
     new Setting(containerEl)
+      .setName("Light pages in dark mode")
+      .setDesc("Keep the paper light (with dark ink) even when the app is dark.")
+      .addToggle((t) => t.setValue(s.lightPagesInDark).onChange((v) => ((s.lightPagesInDark = v), save())));
+    const margin = (name: string, key: "marginTop" | "marginBottom" | "marginInner" | "marginOuter", desc: string) =>
+      new Setting(containerEl)
+        .setName(name)
+        .setDesc(desc)
+        .addSlider((sl) => sl.setLimits(40, 220, 5).setValue(s[key]).setDynamicTooltip().onChange((v) => ((s[key] = v), save())));
+    margin("Top margin", "marginTop", "Percentage of the default. Pages re-flow as you change it.");
+    margin("Bottom margin", "marginBottom", "Percentage of the default.");
+    margin("Inner margin (towards the spine)", "marginInner", "Percentage of the default.");
+    margin("Outer margin", "marginOuter", "Percentage of the default.");
+    new Setting(containerEl)
+      .setName("Turn pages with the mouse wheel")
+      .setDesc("Scroll over the open book to flip forwards or back.")
+      .addToggle((t) => t.setValue(s.wheelFlip).onChange((v) => ((s.wheelFlip = v), save())));
+    new Setting(containerEl)
+      .setName("Resume where you left off")
+      .setDesc("Open the notebook and page you were last reading when the view opens.")
+      .addToggle((t) => t.setValue(s.resumeReading).onChange((v) => ((s.resumeReading = v), save())));
+    new Setting(containerEl)
       .setName("Notebook tilt")
       .setDesc("How far the notebook leans back on the desk. 0 lies it flat towards you; higher looks more like it is seen from an angle.")
       .addSlider((sl) => sl.setLimits(0, 45, 1).setValue(s.bookTilt).setDynamicTooltip().onChange((v) => ((s.bookTilt = v), save())));

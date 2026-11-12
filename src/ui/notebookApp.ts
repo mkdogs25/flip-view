@@ -6,7 +6,7 @@ import deskLight from "../../assets/desk/desk-light.jpg";
 import deskLightLaptop from "../../assets/desk/desk-light-laptop.jpg";
 import shelfDark from "../../assets/shelf/shelf-dark.webp";
 import shelfLight from "../../assets/shelf/shelf-light.webp";
-import { BRICKS, WOODS, brickTexture, leatherTexture, woodTexture } from "../render/textures";
+import { BRICKS, WOODS, brickTexture, woodTexture } from "../render/textures";
 import { notebookProgress, noteStatus, recentNotes, recordVisit, relativeTime } from "../progress";
 import { Bookmark, Notebook, NotebookHost, NoteRef, ViewMode, isNote, realNoteCount } from "../types";
 import { BookStage } from "./book";
@@ -232,6 +232,20 @@ export class NotebookApp {
     this.stage.setNotebook(sel ?? null);
     this.renderScene();
     this.renderEmpty(list.length === 0);
+    this.resumeOnce(sel ?? null);
+  }
+
+  private resumed = false;
+
+  /** With "Resume where you left off" on, reopens the last page the first time notebooks arrive. */
+  private resumeOnce(sel: Notebook | null): void {
+    const s = this.host.settings;
+    if (this.resumed || !sel || !s.resumeReading || !s.lastPosition || s.lastPosition.nb !== sel.id) return;
+    this.resumed = true;
+    const idx = sel.notes.findIndex((n) => n.path === s.lastPosition?.path);
+    if (idx < 0) return;
+    const spread = s.lastPosition.spread;
+    window.setTimeout(() => void this.stage.jumpToPage(idx, spread * 2), 400);
   }
 
   select(id: string): void {
@@ -490,6 +504,10 @@ export class NotebookApp {
 
   private noteVisited(note: NoteRef, spread: number, spreads: number): void {
     const s = this.host.settings;
+    if (s.resumeReading && isNote(note) && this.selectedId) {
+      s.lastPosition = { nb: this.selectedId, path: note.path, spread };
+      this.host.saveSettings();
+    }
     if (!s.trackProgress || !isNote(note)) return;
     if (recordVisit(s, note.path, spread, spreads)) {
       this.host.saveSettings();
@@ -591,7 +609,6 @@ export class NotebookApp {
     const jobs: Array<() => void> = [
       () => r.setProperty("--fv-desk-img", s.deskWood === "auto" ? `url(${dark ? deskDark : deskLight})` : `url(${woodTexture(1500, 940, WOODS[wood], 3, 124)})`),
       () => r.setProperty("--fv-wall-img", `url(${brickTexture(dark ? "dark" : "light")})`),
-      () => r.setProperty("--fv-mat-img", `url(${leatherTexture(dark ? [30, 46, 38] : [158, 104, 62])})`),
     ];
     void BRICKS;
     const next = () => {

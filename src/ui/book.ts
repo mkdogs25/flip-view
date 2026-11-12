@@ -87,6 +87,7 @@ export class BookStage {
   private indexTimer = 0;
   private writeTool: WriteTool | null = null;
   private wtray: HTMLElement;
+  private laptopExit: HTMLButtonElement;
   private rack: HTMLElement;
   private ribbonEl: HTMLElement;
   private btnBookmark: HTMLButtonElement;
@@ -110,6 +111,8 @@ export class BookStage {
   private isOpen = false;
   private busy = false;
   private pendingRebuild = false;
+  /** A background re-layout is in progress (page turns wait for it instead of being dropped). */
+  private rebuilding = false;
   private noteIdx = 0;
   private spread = 0;
   private layout: NoteLayout | null = null;
@@ -158,7 +161,6 @@ export class BookStage {
     // the book
     this.wrap = this.el.createDiv({ cls: "fv-bookwrap" });
     const tilt = this.wrap.createDiv({ cls: "fv-tilt" });
-    tilt.createDiv({ cls: "fv-deskmat" });
     this.book = tilt.createDiv({ cls: "fv-book is-closed" });
     this.book.createDiv({ cls: "fv-boards" });
     this.leftBase = this.book.createDiv({ cls: "fv-pagebase fv-left" });
@@ -255,6 +257,31 @@ export class BookStage {
     rackH.createDiv({ cls: "fv-rack-label", text: "Highlight" });
     this.tray = rackH.createDiv({ cls: "fv-tray" });
     this.legend = this.el.createDiv({ cls: "fv-legend" });
+    this.laptopExit = this.el.createEl("button", { cls: "fv-laptop-exit fv-glass", attr: { type: "button", "aria-label": "Close the laptop and go back to the notebook" } });
+    setIcon(this.laptopExit.createSpan({ cls: "fv-laptop-exit-icon" }), "book-open");
+    this.laptopExit.createSpan({ text: "Close laptop, back to notebook" });
+    this.laptopExit.addEventListener("click", () => this.closeLaptop());
+    // clicking the tucked-away notebook brings it back too
+    this.wrap.addEventListener(
+      "click",
+      (e) => {
+        if (!this.el.hasClass("is-laptop")) return;
+        e.stopPropagation();
+        e.preventDefault();
+        this.closeLaptop();
+      },
+      true,
+    );
+    this.book.addEventListener(
+      "wheel",
+      (e) => {
+        if (!this.host.settings.wheelFlip || !this.isOpen || this.busy || this.el.hasClass("is-laptop") || Math.abs(e.deltaY) < 8) return;
+        if ((e.target as HTMLElement).closest(".fv-editor")) return;
+        e.preventDefault();
+        void (e.deltaY > 0 ? this.next() : this.prev());
+      },
+      { passive: false },
+    );
     this.sfx = new Sfx(() => host.settings);
     document.addEventListener("pointerup", this.onPointerUp);
 
@@ -478,6 +505,14 @@ export class BookStage {
       case "PageUp":
         void this.prev();
         return true;
+      case "Home":
+        if (!this.isOpen) return false;
+        void this.goToNote(0);
+        return true;
+      case "End":
+        if (!this.isOpen || !this.notebook) return false;
+        void this.goToNote(this.notebook.notes.length - 1);
+        return true;
       case "Escape":
         if (this.laptop.isOpen) this.closeLaptop();
         else if (this.hlPop.hasClass("is-open")) this.closeHlPop();
@@ -503,6 +538,7 @@ export class BookStage {
     for (const l of ["classic", "realistic", "wide"]) this.el.toggleClass(`fv-pl-${l}`, s.pageLayout === l);
     this.el.toggleClass("fv-margins", s.marginNotes);
     this.el.setAttr("data-tools", s.toolsSide);
+    this.el.toggleClass("fv-lightpages", s.lightPagesInDark);
     this.rack.setAttr("data-side", s.toolsSide);
     this.el.style.setProperty("--fv-tilt", `${clamp(s.bookTilt, 0, 45)}deg`);
     this.el.toggleClass("fv-ribbon-on", s.ribbon);
@@ -616,8 +652,8 @@ export class BookStage {
     ph = Math.max(ph, 180);
     pw = ph * ratio;
     const scale = ph / 660;
-    const pt = ph * (s.pageLayout === "realistic" ? 0.095 : 0.085);
-    const pb = ph * (s.pageLayout === "realistic" ? 0.115 : 0.1);
+    const pt = Math.min(ph * 0.3, ph * (s.pageLayout === "realistic" ? 0.095 : 0.085) * (clamp(s.marginTop, 40, 220) / 100));
+    const pb = Math.min(ph * 0.3, ph * (s.pageLayout === "realistic" ? 0.115 : 0.1) * (clamp(s.marginBottom, 40, 220) / 100));
     const px = pw * 0.11;
     // gutter side (pin) and outer side (pout) of a page; margin notes widen the outer side
     const mw = s.marginNotes ? pw * 0.115 : 0;
@@ -630,7 +666,16 @@ export class BookStage {
       pin = px * 1.05;
       pout = px * 1.3;
     }
+    pin *= clamp(s.marginInner, 40, 220) / 100;
+    pout *= clamp(s.marginOuter, 40, 220) / 100;
     pout += mw;
+    // always leave a readable column
+    const minCol = pw * 0.42;
+    if (pw - pin - pout < minCol) {
+      const over = minCol - (pw - pin - pout);
+      pin = Math.max(px * 0.2, pin - over / 2);
+      pout = Math.max(px * 0.2 + mw, pout - over / 2);
+    }
     let fs: number;
     let lh: number;
     if (s.viewMode === "handwritten") {
@@ -782,6 +827,7 @@ export class BookStage {
     this.measureSizes();
     if (!this.isOpen || !this.notebook) return;
     this.busy = true;
+    this.rebuilding = true;
     try {
       const prevPages = this.layout ? this.layout.pageCount : 0;
       this.layout = await this.getLayout(this.noteIdx);
@@ -794,6 +840,7 @@ export class BookStage {
     } catch (err) {
       console.error("[flip-view] failed to rebuild pages", err);
     } finally {
+      this.rebuilding = false;
       this.busy = false;
       this.updateChrome();
       this.flushPending();
@@ -806,6 +853,8 @@ export class BookStage {
   }
 
   private async turnTo(noteIdx: number, spreadWanted: number): Promise<void> {
+    // a background re-layout (for example refreshing the contents) should delay a page turn, not swallow it
+    for (let i = 0; i < 60 && this.busy && this.rebuilding && !this.destroyed; i++) await new Promise((r) => window.setTimeout(r, 50));
     if (this.busy || !this.isOpen || !this.notebook || !this.layout) return;
     if (noteIdx < 0 || noteIdx >= this.notebook.notes.length) return;
     this.busy = true;
