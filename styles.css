@@ -6000,3 +6000,16 @@
   left: 150px;
   bottom: 20px;
 }
+
+/* no pot: the writing tools rest loose on the desk */
+.fv-root .fv-cup-write .fv-cup-body,
+.fv-root .fv-cup-write .fv-cup-body::before,
+.fv-root .fv-cup-write .fv-cup-body::after,
+.fv-cup-write::after {
+  display: none;
+}
+
+.fv-root .fv-cup-write .fv-wtray {
+  transform: rotate(-82deg);
+  transform-origin: 30% 80%;
+}
