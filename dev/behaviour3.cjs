@@ -147,7 +147,19 @@ async function fresh(browser, qs) {
   await page.click(".fv-w-eraser"); // deselect
   await page.click('.fv-seg-btn[data-mode="text"]');
   await wait(900);
-  assert(await page.$eval(".fv-wtray", (e) => e.classList.contains("is-disabled")), "writing tools are for handwritten view only");
+  assert(!(await page.$eval(".fv-wtray", (e) => e.classList.contains("is-disabled"))), "writing tools stay available in text view");
+  await page.click(".fv-w-pen");
+  const rt = await page.$eval(".fv-pagebase.fv-right", (e) => {
+    const b = e.getBoundingClientRect();
+    return { x: b.left, y: b.top, w: b.width, h: b.height };
+  });
+  await page.mouse.move(rt.x + rt.w * 0.3, rt.y + rt.h * 0.8);
+  await page.mouse.down();
+  await page.mouse.move(rt.x + rt.w * 0.6, rt.y + rt.h * 0.84, { steps: 6 });
+  await page.mouse.up();
+  await wait(200);
+  assert((await page.$$(".fv-pagebase .fv-stroke")).length === 1, "pen draws in text view too");
+  assert(await page.evaluate(() => Object.keys(window.__settings.annotations).some((k) => k.startsWith("text:"))), "...kept separately from the handwritten ink");
   assert(page.errors.length === 0, "no errors in writing test " + page.errors.join("|"));
   await browser.close();
 })();

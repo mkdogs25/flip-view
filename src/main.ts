@@ -52,6 +52,10 @@ export default class FlipViewPlugin extends Plugin {
           delete s.highlights[oldPath];
         }
         for (const id of Object.keys(s.noteOrder)) s.noteOrder[id] = s.noteOrder[id].map((k) => (k === oldPath ? file.path : k));
+        if (s.annotations["text:" + oldPath]) {
+          s.annotations["text:" + file.path] = s.annotations["text:" + oldPath];
+          delete s.annotations["text:" + oldPath];
+        }
         for (const key of ["annotations", "readState"] as const) {
           const map = s[key] as Record<string, unknown>;
           if (map[oldPath]) {

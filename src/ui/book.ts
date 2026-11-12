@@ -819,7 +819,7 @@ export class BookStage {
     const s = this.host.settings;
     const note = layout.note;
     const folio = isNote(note) && this.notebook ? this.tally.start(this.notebook.notes, noteIdx, s.packShortNotes).folio + index : undefined;
-    const annots = s.viewMode === "handwritten" ? s.annotations[note.path] : undefined;
+    const annots = s.annotations[this.annotKey(note.path)];
     const guest = this.guests.get(noteIdx);
     if (guest && layout.pageCount === 1 && index === 1 && side === "right" && this.notebook) {
       const gn = guest.layout.note;
@@ -1702,9 +1702,9 @@ export class BookStage {
 
   private renderWriteTools(): void {
     const s = this.host.settings;
-    const hand = s.viewMode === "handwritten";
+    const hand = true; // pens work in both views (ink is kept separately for each)
     this.wtray.empty();
-    this.wtray.toggleClass("is-disabled", !hand);
+    this.wtray.toggleClass("is-disabled", false);
     const defs: Array<[WriteTool, string]> = [
       ["pen", "Pen"],
       ["pencil", "Pencil"],
@@ -1758,7 +1758,6 @@ export class BookStage {
 
   private selectWriteTool(t: WriteTool | null): void {
     if (t === this.writeTool) t = null;
-    if (t && this.host.settings.viewMode !== "handwritten") return;
     this.writeTool = t;
     if (t) {
       this.activePen = null;
@@ -1771,9 +1770,14 @@ export class BookStage {
     this.renderTools();
   }
 
+  /** Ink is stored per note and per view, because the two views break the pages differently. */
+  private annotKey(path: string): string {
+    return this.host.settings.viewMode === "text" ? `text:${path}` : path;
+  }
+
   private currentAnnots(): Annotation[] {
     const n = this.currentNote();
-    return n ? (this.host.settings.annotations[n.path] ??= []) : [];
+    return n ? (this.host.settings.annotations[this.annotKey(n.path)] ??= []) : [];
   }
 
   private renderVisibleInk(): void {
@@ -1786,7 +1790,7 @@ export class BookStage {
     const list = this.currentAnnots();
     if (!n || list.length === 0) return;
     list.pop();
-    if (list.length === 0) delete this.host.settings.annotations[n.path];
+    if (list.length === 0) delete this.host.settings.annotations[this.annotKey(n.path)];
     this.host.saveSettings();
     this.renderVisibleInk();
     this.sfx.erase();
@@ -1795,13 +1799,13 @@ export class BookStage {
   private commitAnnot(a: Annotation): void {
     const n = this.currentNote();
     if (!n) return;
-    (this.host.settings.annotations[n.path] ??= []).push(a);
+    (this.host.settings.annotations[this.annotKey(n.path)] ??= []).push(a);
     this.host.saveSettings();
   }
 
   private onInkDown(e: PointerEvent): void {
     const tool = this.writeTool;
-    if (!tool || e.button !== 0 || !this.isOpen || this.busy || this.host.settings.viewMode !== "handwritten") return;
+    if (!tool || e.button !== 0 || !this.isOpen || this.busy) return;
     const pageEl = (e.target as HTMLElement).closest<HTMLElement>(".fv-pagebase .fv-page");
     const note = this.currentNote();
     if (!pageEl || !note || isIndex(note) || pageEl.classList.contains("fv-guest")) return;
@@ -1886,7 +1890,7 @@ export class BookStage {
       } else if (!cancelled && text) {
         list.push({ id: Math.random().toString(36).slice(2, 9), kind: "text", page: idx, tool: "text", color, x, y, text });
       }
-      if (list.length === 0) delete this.host.settings.annotations[note.path];
+      if (list.length === 0) delete this.host.settings.annotations[this.annotKey(note.path)];
       this.host.saveSettings();
       this.renderVisibleInk();
     });
@@ -1905,7 +1909,7 @@ export class BookStage {
     if (!note) return;
     let removed = false;
     const hit = (ev: PointerEvent): void => {
-      const list = this.host.settings.annotations[note.path];
+      const list = this.host.settings.annotations[this.annotKey(note.path)];
       if (!list) return;
       const rect = pageEl.getBoundingClientRect();
       const px = ev.clientX;
@@ -1932,8 +1936,8 @@ export class BookStage {
       });
       if (keep.length !== list.length) {
         removed = true;
-        if (keep.length) this.host.settings.annotations[note.path] = keep;
-        else delete this.host.settings.annotations[note.path];
+        if (keep.length) this.host.settings.annotations[this.annotKey(note.path)] = keep;
+        else delete this.host.settings.annotations[this.annotKey(note.path)];
         this.renderVisibleInk();
       }
     };
