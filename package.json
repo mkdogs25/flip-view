@@ -1,6 +1,6 @@
 {
   "name": "flip-view",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "description": "View your Obsidian vault as notebooks on a desk, with a page-flipping animation, handwritten or text previews and procedurally generated covers.",
   "main": "main.js",
   "scripts": {

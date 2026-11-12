@@ -6013,3 +6013,19 @@
   transform: rotate(-82deg);
   transform-origin: 30% 80%;
 }
+
+/* cover names wrap and centre, clear of the elastic band */
+.fv-plate {
+  left: 44%;
+  width: 56%;
+  box-sizing: border-box;
+}
+
+.fv-plate-title,
+.fv-sc-title {
+  text-align: center;
+  text-wrap: balance;
+  overflow-wrap: break-word;
+  max-width: 100%;
+}
+

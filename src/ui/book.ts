@@ -13,7 +13,6 @@ import { ensureInkLayer, makeStrokeEl, renderInk, strokePath } from "./ink";
 import { Heading, IndexData, LayoutConfig, LayoutEngine, NoteLayout } from "./layout";
 import { PageTally } from "./tally";
 import { penSvg } from "./pens";
-import { propEl } from "./props";
 
 export interface StageCallbacks {
   toggleSidebar(): void;
@@ -208,8 +207,6 @@ export class BookStage {
     this.lastEditText = this.lastEdit.createDiv({ cls: "fv-lastedit-text" });
     this.hint = this.el.createDiv({ cls: "fv-hint" });
     const things = this.el.createDiv({ cls: "fv-desk-things" });
-    things.appendChild(propEl("pencil", "fv-thing fv-thing-pencil"));
-    things.appendChild(propEl("clips", "fv-thing fv-thing-clips"));
 
     this.footer = this.el.createDiv({ cls: "fv-footer" });
     this.footerOpen = this.footer.createDiv({ cls: "fv-footer-open fv-glass" });
