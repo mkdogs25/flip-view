@@ -133,7 +133,18 @@ export interface Bookmark {
   at: number;
 }
 
+/** A cover picture the user uploaded (already cropped to the cover's shape) and the colours worked out from it. */
+export interface CustomCover {
+  url: string;
+  base: string;
+  dark: string;
+  light: string;
+  ink: string;
+  lightCover: boolean;
+}
+
 export interface CoverOverride {
+  image?: CustomCover;
   style?: CoverStyle;
   color?: string;
   spine?: SpineStyle;

@@ -1,5 +1,5 @@
-import { App, Modal, Setting } from "obsidian";
-import { BandStyle, CoverStyle, FlipViewSettings, Notebook, PaperColor, SpineStyle } from "./types";
+import { App, Modal, Notice, Setting } from "obsidian";
+import { BandStyle, CoverStyle, CustomCover, FlipViewSettings, Notebook, PaperColor, SpineStyle } from "./types";
 
 export class NewNotebookModal extends Modal {
   private name = "";
@@ -177,8 +177,41 @@ export class CoverModal extends Modal {
     const ov = () => (s.coverOverrides[id] ??= {});
     const tidy = () => {
       const o = s.coverOverrides[id];
-      if (o && !o.style && !o.color && !o.spine && !o.band && !o.bandColor && !o.ribbonColor && !o.paper) delete s.coverOverrides[id];
+      if (o && !o.style && !o.color && !o.spine && !o.band && !o.bandColor && !o.ribbonColor && !o.paper && !o.image) delete s.coverOverrides[id];
     };
+
+    new Setting(contentEl)
+      .setName("Your own cover")
+      .setDesc(s.coverOverrides[id]?.image ? "A picture you uploaded is on this cover. It is cropped to fit." : "Upload a picture (PNG, JPG, WebP…) to use as this notebook's cover. It is cropped to the cover's shape and kept in the plugin's data.")
+      .addButton((b) =>
+        b.setButtonText(s.coverOverrides[id]?.image ? "Replace image" : "Upload image").onClick(() => {
+          const input = document.createElement("input");
+          input.type = "file";
+          input.accept = "image/*";
+          input.addEventListener("change", () => {
+            const file = input.files?.[0];
+            if (!file) return;
+            void coverFromFile(file).then(
+              (img) => {
+                ov().image = img;
+                this.onOpen();
+              },
+              () => new Notice("That image could not be read."),
+            );
+          });
+          input.click();
+        }),
+      )
+      .addExtraButton((b) =>
+        b
+          .setIcon("trash")
+          .setTooltip("Remove your cover and go back to the generated one")
+          .onClick(() => {
+            if (s.coverOverrides[id]) delete s.coverOverrides[id].image;
+            tidy();
+            this.onOpen();
+          }),
+      );
 
     new Setting(contentEl)
       .setName("Style")
@@ -278,5 +311,62 @@ export class CoverModal extends Modal {
   onClose(): void {
     this.contentEl.empty();
     this.done();
+  }
+}
+
+/** Crops an image file to the cover's 3:4 shape, shrinks it, and works out the colours the rest of the book borrows from it. */
+async function coverFromFile(file: File): Promise<CustomCover> {
+  const bitmapUrl = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error("decode"));
+      el.src = bitmapUrl;
+    });
+    const W = 600;
+    const H = 800;
+    const canvas = document.createElement("canvas");
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("canvas");
+    const k = Math.max(W / img.width, H / img.height);
+    const w = img.width * k;
+    const h = img.height * k;
+    ctx.drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
+    // average colour from a tiny copy
+    const tiny = document.createElement("canvas");
+    tiny.width = 12;
+    tiny.height = 16;
+    const tc = tiny.getContext("2d");
+    if (!tc) throw new Error("canvas");
+    tc.drawImage(canvas, 0, 0, 12, 16);
+    const px = tc.getImageData(0, 0, 12, 16).data;
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    const n = px.length / 4;
+    for (let i = 0; i < px.length; i += 4) {
+      r += px[i];
+      g += px[i + 1];
+      b += px[i + 2];
+    }
+    r /= n;
+    g /= n;
+    b /= n;
+    const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    const rgb = (x: number, y: number, z: number) => `rgb(${Math.round(x)},${Math.round(y)},${Math.round(z)})`;
+    const lightCover = lum > 0.58;
+    return {
+      url: canvas.toDataURL("image/jpeg", 0.86),
+      base: rgb(r, g, b),
+      dark: rgb(r * 0.35, g * 0.35, b * 0.35),
+      light: rgb(r + (255 - r) * 0.55, g + (255 - g) * 0.55, b + (255 - b) * 0.45),
+      ink: lightCover ? "#2b2140" : "#f6ecd2",
+      lightCover,
+    };
+  } finally {
+    URL.revokeObjectURL(bitmapUrl);
   }
 }

@@ -29,6 +29,8 @@ export function resolveLook(s: FlipViewSettings, nb: Notebook): ResolvedLook {
 }
 
 export function coverFor(s: FlipViewSettings, nb: Notebook, low = false) {
+  const custom = s.coverOverrides[nb.id]?.image;
+  if (custom) return { ...custom, style: "plain" as const };
   const l = resolveLook(s, nb);
   return generateCover(l.seed, l.style, l.color, low);
 }

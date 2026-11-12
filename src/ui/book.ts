@@ -1,5 +1,4 @@
 import { setIcon } from "obsidian";
-import { generateCover } from "../render/cover";
 import { handFontInfo } from "../render/fonts";
 import { applyHighlight, highlightColor, removeHighlightEls, textOffsetOf } from "../render/highlights";
 import { Sfx } from "../render/sound";
@@ -8,7 +7,7 @@ import { Annotation, Bookmark, Highlight, NoteRef, Notebook, NotebookHost, ViewM
 import { clamp, hashString } from "../util/rng";
 import { formatDate, iconButton, progressEl } from "./dom";
 import { Laptop } from "./laptop";
-import { resolveLook } from "./coverStyle";
+import { coverFor, resolveLook } from "./coverStyle";
 import { ensureInkLayer, makeStrokeEl, renderInk, strokePath } from "./ink";
 import { Heading, IndexData, LayoutConfig, LayoutEngine, NoteLayout } from "./layout";
 import { PageTally } from "./tally";
@@ -1197,7 +1196,8 @@ export class BookStage {
     this.plateCount.setText(this.countLabel());
     this.applyLook();
     const { seed, style, color } = resolveLook(this.host.settings, nb);
-    const key = `${nb.id}|${seed}|${style}|${color}`;
+    const custom = this.host.settings.coverOverrides[nb.id]?.image;
+    const key = `${nb.id}|${seed}|${style}|${color}|${custom ? custom.url.length + custom.url.slice(-24) : ""}`;
     if (key === this.coverKey) return;
     this.coverKey = key;
     const token = ++this.coverToken;
@@ -1205,7 +1205,7 @@ export class BookStage {
     window.setTimeout(() => {
       if (token !== this.coverToken || this.destroyed) return;
       try {
-        const res = generateCover(seed, style, color);
+        const res = coverFor(this.host.settings, nb);
         this.coverFront.style.backgroundImage = `url(${res.url})`;
         this.coverFront.style.setProperty("--fv-cover-base", res.base);
         this.coverFront.style.setProperty("--fv-cover-dark", res.dark);
