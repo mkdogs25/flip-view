@@ -301,12 +301,13 @@ function buildIndexFlow(flow: HTMLElement, data: IndexData, s: FlipViewSettings)
       return;
     }
     const row = wrap.createDiv({ cls: "fv-idx-row", attr: { "data-idx": String(i), role: "link" } });
+    const head = row.createDiv({ cls: "fv-idx-head" });
     if (s.indexStatus) {
       const st = data.status(n.path);
-      row.createSpan({ cls: `fv-idx-status is-${st}`, text: st === "finished" ? "✓" : st === "opened" ? "●" : "○" });
+      head.createSpan({ cls: `fv-idx-status is-${st}`, text: st === "finished" ? "✓" : st === "opened" ? "●" : "○" });
     }
-    if (s.indexBookmarks && data.bookmarked(n.path)) row.createSpan({ cls: "fv-idx-star", text: "★" });
-    row.createSpan({ cls: "fv-idx-title", text: n.title });
+    if (s.indexBookmarks && data.bookmarked(n.path)) head.createSpan({ cls: "fv-idx-star", text: "★" });
+    head.createSpan({ cls: "fv-idx-title", text: n.title });
     if (s.indexLeader !== "none") row.createSpan({ cls: `fv-idx-lead is-${s.indexLeader}` });
     if (s.indexCreated && n.ctime) row.createSpan({ cls: "fv-idx-date", text: `+${formatDateAs(n.ctime, s.indexDates)}` });
     if (s.indexLastEdited) row.createSpan({ cls: "fv-idx-date", text: formatDateAs(n.mtime, s.indexDates) });

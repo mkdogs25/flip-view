@@ -2674,6 +2674,7 @@
 
 .fv-idx-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 0.4em;
   min-height: var(--fv-lh);
@@ -2708,11 +2709,18 @@
 }
 
 .fv-idx-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+.fv-idx-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4em;
   flex: 0 1 auto;
-  min-width: 3em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  max-width: 100%;
 }
 
 .fv-idx-lead {
