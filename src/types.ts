@@ -158,6 +158,8 @@ export interface FlipViewSettings {
   viewMode: ViewMode;
   theme: "auto" | "light" | "dark";
   showDesk: boolean;
+  /** "auto" picks walnut in dark mode and oak in light mode. */
+  deskWood: "auto" | "walnut" | "oak" | "cherry" | "ebony" | "birch" | "teak";
   coverStyle: CoverStyle;
   paperStyle: PaperStyle;
   animation: "full" | "fast" | "off";
@@ -272,6 +274,7 @@ export const DEFAULT_SETTINGS: FlipViewSettings = {
   viewMode: "handwritten",
   theme: "auto",
   showDesk: true,
+  deskWood: "auto",
   coverStyle: "storybook",
   paperStyle: "plain",
   animation: "full",

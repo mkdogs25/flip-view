@@ -1,7 +1,6 @@
 import { setIcon } from "obsidian";
 import { handFontInfo } from "../render/fonts";
-import deskDark from "../../assets/desk/desk-dark.jpg";
-import deskLight from "../../assets/desk/desk-light.jpg";
+import { BRICKS, WOODS, brickTexture, leatherTexture, woodTexture } from "../render/textures";
 import { notebookProgress, noteStatus, recentNotes, recordVisit, relativeTime } from "../progress";
 import { Bookmark, Notebook, NotebookHost, NoteRef, ViewMode, isNote, realNoteCount } from "../types";
 import { BookStage } from "./book";
@@ -35,6 +34,7 @@ export class NotebookApp {
   private displace: SVGElement;
   private wobbleId: string;
   private pencilId = "";
+  private texToken = 0;
   private notebooks: Notebook[] = [];
   private selectedId = "";
   private filter = "";
@@ -272,7 +272,7 @@ export class NotebookApp {
     s.inkColor ? r.setProperty("--fv-ink-user", s.inkColor) : r.removeProperty("--fv-ink-user");
     s.accentColor ? r.setProperty("--fv-accent-user", s.accentColor) : r.removeProperty("--fv-accent-user");
     s.textFont.trim() ? r.setProperty("--fv-text-font", s.textFont) : r.removeProperty("--fv-text-font");
-    r.setProperty("--fv-desk-img", `url("${dark ? deskDark : deskLight}")`);
+    this.applyTextures(dark);
     r.setProperty("--fv-hand-stroke", `${font.stroke ?? 0}px`);
     this.displace.setAttribute("scale", String(1 + (s.messiness / 100) * 4));
     this.stage.applySettings();
@@ -565,6 +565,33 @@ export class NotebookApp {
   }
 
   /* ------------------------------------------------------------ the scene */
+
+  /** Renders the desk, shelf plank, brick wall and leather mat one after another so the UI appears first. */
+  private applyTextures(dark: boolean): void {
+    const s = this.host.settings;
+    const token = ++this.texToken;
+    const r = this.root.style;
+    const wood = s.deskWood === "auto" ? (dark ? "walnut" : "oak") : s.deskWood;
+    const shelfWood = dark ? "walnut" : "oak";
+    const jobs: Array<() => void> = [
+      () => r.setProperty("--fv-desk-img", `url(${woodTexture(1500, 940, WOODS[wood], 3, 124)})`),
+      () => r.setProperty("--fv-wall-img", `url(${brickTexture(dark ? "dark" : "light")})`),
+      () => r.setProperty("--fv-plank-img", `url(${woodTexture(1400, 64, WOODS[shelfWood], 9, 64)})`),
+      () => r.setProperty("--fv-mat-img", `url(${leatherTexture(dark ? [30, 46, 38] : [158, 104, 62])})`),
+    ];
+    void BRICKS;
+    const next = () => {
+      const job = jobs.shift();
+      if (!job || token !== this.texToken) return;
+      try {
+        job();
+      } catch (err) {
+        console.error("[flip-view] texture failed", err);
+      }
+      window.setTimeout(next, 16);
+    };
+    window.setTimeout(next, 0);
+  }
 
   private stripHeight(): number {
     return this.host.settings.stripCollapsed ? 46 : 272;

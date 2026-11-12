@@ -12,6 +12,7 @@ import { resolveLook } from "./coverStyle";
 import { ensureInkLayer, makeStrokeEl, renderInk, strokePath } from "./ink";
 import { Heading, IndexData, LayoutConfig, LayoutEngine, NoteLayout } from "./layout";
 import { PageTally } from "./tally";
+import { propEl } from "./props";
 
 export interface StageCallbacks {
   toggleSidebar(): void;
@@ -151,6 +152,7 @@ export class BookStage {
     // the book
     this.wrap = this.el.createDiv({ cls: "fv-bookwrap" });
     const tilt = this.wrap.createDiv({ cls: "fv-tilt" });
+    tilt.createDiv({ cls: "fv-deskmat" });
     this.book = tilt.createDiv({ cls: "fv-book is-closed" });
     this.book.createDiv({ cls: "fv-boards" });
     this.leftBase = this.book.createDiv({ cls: "fv-pagebase fv-left" });
@@ -201,7 +203,10 @@ export class BookStage {
     setIcon(this.lastEdit.createSpan({ cls: "fv-lastedit-icon" }), "clock");
     this.lastEditText = this.lastEdit.createDiv({ cls: "fv-lastedit-text" });
     this.hint = this.el.createDiv({ cls: "fv-hint" });
-    this.el.createDiv({ cls: "fv-deco" });
+    const things = this.el.createDiv({ cls: "fv-desk-things" });
+    things.appendChild(propEl("laptop", "fv-thing fv-thing-laptop"));
+    things.appendChild(propEl("pencil", "fv-thing fv-thing-pencil"));
+    things.appendChild(propEl("clips", "fv-thing fv-thing-clips"));
 
     this.footer = this.el.createDiv({ cls: "fv-footer" });
     this.footerOpen = this.footer.createDiv({ cls: "fv-footer-open fv-glass" });

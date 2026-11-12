@@ -122,6 +122,21 @@ export class FlipViewSettingTab extends PluginSettingTab {
       .setDesc("The wooden desk behind the notebook. Turn off for a plain background.")
       .addToggle((t) => t.setValue(s.showDesk).onChange((v) => ((s.showDesk = v), save())));
     new Setting(containerEl)
+      .setName("Desk wood")
+      .setDesc("The desk and shelf are rendered as real wood boards, in the finish you pick. Auto uses walnut in dark mode and oak in light mode.")
+      .addDropdown((d) =>
+        d
+          .addOption("auto", "Auto")
+          .addOption("walnut", "Walnut")
+          .addOption("oak", "Oak")
+          .addOption("cherry", "Cherry")
+          .addOption("teak", "Teak")
+          .addOption("birch", "Birch")
+          .addOption("ebony", "Ebony")
+          .setValue(s.deskWood)
+          .onChange((v) => ((s.deskWood = v as FlipViewSettings["deskWood"]), save())),
+      );
+    new Setting(containerEl)
       .setName("Cover design")
       .setDesc("Covers are generated randomly from each notebook's name, with no AI. Pick one style or let each notebook get its own. You can also change a single notebook's cover with the palette button on its closed cover.")
       .addDropdown((d) => {
