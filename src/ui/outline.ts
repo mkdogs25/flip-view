@@ -9,7 +9,7 @@ export interface OutlineHandlers {
   page(index: number, page: number): void;
   /** `to` is the index the item should have once moved. */
   reorder(from: number, to: number): void;
-  addSeparator(): void;
+  addSeparator(sub?: boolean): void;
   renameSeparator(index: number): void;
   deleteSeparator(index: number): void;
   removeHighlight(id: string): void;
@@ -42,9 +42,10 @@ export class OutlinePanel {
     this.title = titles.createDiv({ cls: "fv-ol-title", text: "Outline" });
     this.sub = titles.createDiv({ cls: "fv-ol-sub" });
     iconButton(head, "bookmark-plus", "Add a separator page", "fv-ol-add").addEventListener("click", () => this.h.addSeparator());
+    iconButton(head, "corner-down-right", "Add a sub-separator under the current section", "fv-ol-add-sub").addEventListener("click", () => this.h.addSeparator(true));
     iconButton(head, "x", "Hide outline").addEventListener("click", () => this.h.toggle());
     this.list = this.el.createDiv({ cls: "fv-ol-list" });
-    this.el.createDiv({ cls: "fv-ol-foot", text: "Drag to reorder. Separators are page dividers you can place between notes." });
+    this.el.createDiv({ cls: "fv-ol-foot", text: "Drag to reorder. Separators are page dividers you can place between notes; sub-separators sit under them." });
   }
 
   render(nb: Notebook | null, st: OutlineState): void {
@@ -64,10 +65,11 @@ export class OutlinePanel {
       const idx = isIndex(n);
       const row = this.list.createDiv({ cls: "fv-ol-row", attr: idx ? {} : { draggable: "true" } });
       row.toggleClass("is-sep", sep);
+      row.toggleClass("is-sub", sep && n.sepLevel === 2);
       row.toggleClass("is-index", idx);
       row.toggleClass("is-current", i === st.current);
       setIcon(row.createSpan({ cls: "fv-ol-grip" }), "grip-vertical");
-      setIcon(row.createSpan({ cls: "fv-ol-icon" }), idx ? "list" : sep ? "bookmark" : "file-text");
+      setIcon(row.createSpan({ cls: "fv-ol-icon" }), idx ? "list" : sep ? (n.sepLevel === 2 ? "corner-down-right" : "bookmark") : "file-text");
       const label = row.createEl("button", { cls: "fv-ol-label", text: n.title, attr: { type: "button", title: n.title } });
       label.addEventListener("click", () => this.h.open(i));
       if (st.status && !sep && !idx) {

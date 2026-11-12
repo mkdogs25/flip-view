@@ -7,6 +7,8 @@ export interface NoteRef {
   kind?: "note" | "separator" | "index";
   /** Separators only. */
   sepId?: string;
+  /** 2 for a sub-separator (a heading under a separator). */
+  sepLevel?: 1 | 2;
   /** File size in bytes (notes only), used to estimate page counts before a note has been laid out. */
   size?: number;
 }
@@ -281,6 +283,8 @@ export interface FlipViewSettings {
   noteOrder: Record<string, string[]>;
   /** notebook id -> separator id -> title */
   separators: Record<string, Record<string, string>>;
+  /** notebook id -> ids of separators that are sub-separators */
+  subSeparators: Record<string, Record<string, true>>;
   /** notebook id -> display name */
   notebookNames: Record<string, string>;
   coverOverrides: Record<string, CoverOverride>;
@@ -400,6 +404,7 @@ export const DEFAULT_SETTINGS: FlipViewSettings = {
   sidebarCollapsed: false,
   noteOrder: {},
   separators: {},
+  subSeparators: {},
   notebookNames: {},
   coverOverrides: {},
   highlights: {},

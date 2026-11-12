@@ -201,5 +201,10 @@ app.setNotebooks(host.getNotebooks());
 if (q.get("seps")) {
   settings.separators["folder:Physics"] = { s1: "Part Two: Heat" };
   settings.noteOrder["folder:Physics"] = ["Physics/Quantum Mechanics.md", "sep:s1", "Physics/Thermodynamics.md"];
+  if (q.get("seps") === "sub") {
+    settings.separators["folder:Physics"].s2 = "Laws of Heat";
+    settings.subSeparators["folder:Physics"] = { s2: true };
+    settings.noteOrder["folder:Physics"] = ["Physics/Quantum Mechanics.md", "sep:s1", "sep:s2", "Physics/Thermodynamics.md"];
+  }
   app.setNotebooks(host.getNotebooks());
 }

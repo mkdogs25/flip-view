@@ -68,10 +68,11 @@ export function finishNotebook(nb: Notebook, s: FlipViewSettings): void {
   const custom = s.notebookNames[nb.id]?.trim();
   nb.name = custom || nb.originalName;
   const seps = s.separators[nb.id] ?? {};
+  const subs = s.subSeparators[nb.id] ?? {};
   const byKey = new Map<string, NoteRef>();
   for (const n of nb.notes) byKey.set(n.path, n);
   for (const [id, title] of Object.entries(seps)) {
-    byKey.set("sep:" + id, { path: "sep:" + id, title, mtime: hashString(title), ctime: 0, kind: "separator", sepId: id });
+    byKey.set("sep:" + id, { path: "sep:" + id, title, mtime: hashString(title), ctime: 0, kind: "separator", sepId: id, sepLevel: subs[id] ? 2 : 1 });
   }
   const out: NoteRef[] = [];
   const used = new Set<string>();

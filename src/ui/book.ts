@@ -1366,7 +1366,7 @@ export class BookStage {
     this.tabsEl.empty();
     this.tabsEl.toggleClass("is-hidden", !this.isOpen || !nb);
     if (!nb || !this.isOpen) return;
-    const sections = nb.notes.map((n, i) => ({ n, i })).filter((x) => isSeparator(x.n));
+    const sections = nb.notes.map((n, i) => ({ n, i })).filter((x) => isSeparator(x.n) && x.n.sepLevel !== 2);
     if (sections.length === 0) return;
     const palette = ["#8bc34a", "#7e57c2", "#ff9800", "#42a5f5", "#ffca28", "#ef5350", "#26a69a"];
     const entries = [...nb.notes.map((n, i) => ({ n, i })).filter((x) => isIndex(x.n)), ...sections];

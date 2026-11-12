@@ -78,7 +78,7 @@ export default class FlipViewPlugin extends Plugin {
     const base = freshSettings();
     this.settings = { ...base, ...saved };
     // make sure nested containers always exist, even for data saved by older versions
-    for (const k of ["coverSeeds", "noteOrder", "separators", "notebookNames", "coverOverrides", "highlights", "annotations", "readState", "bookmarks", "writeColors"] as const) {
+    for (const k of ["coverSeeds", "noteOrder", "separators", "subSeparators", "notebookNames", "coverOverrides", "highlights", "annotations", "readState", "bookmarks", "writeColors"] as const) {
       (this.settings as unknown as Record<string, unknown>)[k] = { ...(base[k] as object), ...((saved?.[k] as object | undefined) ?? {}) };
     }
     if (!Array.isArray(this.settings.highlighters)) this.settings.highlighters = base.highlighters;

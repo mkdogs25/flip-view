@@ -171,7 +171,7 @@ export class NotebookApp {
       open: (i) => void this.stage.goToNote(i),
       page: (i, page) => void this.stage.jumpToPage(i, page),
       reorder: (from, to) => this.reorder(from, to),
-      addSeparator: () => void this.addSeparator(),
+      addSeparator: (sub) => void this.addSeparator(!!sub),
       renameSeparator: (i) => void this.renameSeparator(i),
       deleteSeparator: (i) => this.deleteSeparator(i),
       removeHighlight: (id) => this.stage.removeHighlight(id),
@@ -379,13 +379,13 @@ export class NotebookApp {
     this.reload();
   }
 
-  private async addSeparator(): Promise<void> {
+  private async addSeparator(sub = false): Promise<void> {
     const nb = this.stage.currentNotebook();
     if (!nb) return;
     const title = await this.host.promptText({
-      title: "Add separator page",
-      placeholder: "Chapter two",
-      hint: "A divider page with this title, placed after the note you're reading (or at the end).",
+      title: sub ? "Add sub-separator page" : "Add separator page",
+      placeholder: sub ? "Section 2.1" : "Chapter two",
+      hint: sub ? "A smaller divider page that sits under the current chapter, placed after the note you're reading (or at the end)." : "A divider page with this title, placed after the note you're reading (or at the end).",
     });
     if (!title?.trim()) return;
     const id = Math.random().toString(36).slice(2, 9);
@@ -393,6 +393,7 @@ export class NotebookApp {
     const at = this.stage.currentIndex();
     keys.splice(at >= 0 ? at + 1 : keys.length, 0, "sep:" + id);
     (this.host.settings.separators[nb.id] ??= {})[id] = title.trim();
+    if (sub) (this.host.settings.subSeparators[nb.id] ??= {})[id] = true;
     this.host.settings.noteOrder[nb.id] = keys.filter((k) => !k.startsWith("index:"));
     this.host.saveSettings();
     this.reload();
@@ -414,6 +415,7 @@ export class NotebookApp {
     const n = nb?.notes[index];
     if (!nb || !n?.sepId) return;
     delete this.host.settings.separators[nb.id]?.[n.sepId];
+    delete this.host.settings.subSeparators[nb.id]?.[n.sepId];
     this.host.settings.noteOrder[nb.id] = (this.host.settings.noteOrder[nb.id] ?? nb.notes.map((x) => x.path)).filter((k) => k !== n.path && !k.startsWith("index:"));
     this.host.saveSettings();
     this.reload();

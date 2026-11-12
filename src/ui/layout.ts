@@ -100,7 +100,7 @@ export class NoteLayout {
     this.renderMargins(page, index);
     if (opts.annots) renderInk(page, opts.annots.filter((a) => a.page === index));
     else ensureInkLayer(page);
-    if (this.separator && side === "right") {
+    if (this.separator && side === "right" && this.note.sepLevel !== 2) {
       const tab = page.createDiv({ cls: "fv-sep-tab" });
       tab.createSpan({ text: this.note.title });
     }
@@ -241,7 +241,7 @@ export class LayoutEngine {
     } else if (isSeparator(note)) {
       flow.addClass("fv-flow-sep");
       flow.createDiv({ cls: "fv-sep-spacer" });
-      const sep = flow.createDiv({ cls: "fv-sep" });
+      const sep = flow.createDiv({ cls: note.sepLevel === 2 ? "fv-sep is-sub" : "fv-sep" });
       sep.createEl("h1", { cls: "fv-sep-title", text: note.title });
       sep.createDiv({ cls: "fv-sep-flourish" });
     } else {
@@ -322,7 +322,7 @@ function buildIndexFlow(flow: HTMLElement, data: IndexData, s: FlipViewSettings)
     if (n.kind === "index") return;
     if (n.kind === "separator") {
       if (!s.indexSections) return;
-      const sec = wrap.createDiv({ cls: "fv-idx-section", attr: { "data-idx": String(i), role: "link" } });
+      const sec = wrap.createDiv({ cls: n.sepLevel === 2 ? "fv-idx-section is-sub" : "fv-idx-section", attr: { "data-idx": String(i), role: "link" } });
       sec.createSpan({ text: n.title });
       return;
     }
