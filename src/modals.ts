@@ -44,7 +44,7 @@ export class HelpModal extends Modal {
       "Pick a notebook on the left, then click its cover to flip it open. The shelf button (next to the sidebar button) shows all your notebooks on a shelf; click a spine to pull one out.",
       "Along the top, covers of all your notebooks stand on a shelf: click one and it slides onto the desk. The Notebook Info card has quick appearance controls. Press / to search every note.",
       "Every notebook starts with a contents page: click an entry to jump to that note. If you've added separator pages, coloured tabs on the book's edge jump to each section.",
-      "Keys: ←/→ turn pages, Home/End jump to the first/last note, / searches, Esc closes the laptop, a pen or the notebook. You can also turn pages with the mouse wheel (settings). The pencil button under the book edits the note's text.",
+      "Keys: ←/→ turn pages, Home/End jump to the first/last note, F hides every control (frameless mode), T switches handwritten/text, B bookmarks the page, / searches, Esc closes the laptop, a pen or the notebook. You can also turn pages with the mouse wheel (settings). The pencil button under the book edits the note's text.",
       "In handwritten view the tool rack (either side of the desk, your choice) lets you draw and type on the pages; double-click a highlight to recolour it, add a margin note, or remove it.",
       "Turn pages with the arrow keys, the page edges, or the arrows under the book. Turning back past the first page closes the notebook.",
       "Switch between Handwritten and Text at the top. Text uses your own note font; handwriting is generated from the same text.",

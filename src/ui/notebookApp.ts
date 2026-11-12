@@ -123,6 +123,7 @@ export class NotebookApp {
       toggleSidebar: () => this.toggleSidebar(),
       toggleOutline: () => this.toggleOutline(),
       toggleFocus: () => this.toggleFocus(),
+      toggleFrameless: () => this.toggleFrameless(),
       modeChanged: (mode) => this.setMode(mode),
       customiseCover: (nb) => void this.customiseCover(nb),
       stateChanged: () => this.refreshOutline(),
@@ -195,6 +196,11 @@ export class NotebookApp {
       }
       if (e.key === "Escape" && this.search.isOpen) {
         this.search.close();
+        return;
+      }
+      if (e.key === "Escape" && this.root.hasClass("fv-frameless") && !this.stage.hasTransient()) {
+        this.toggleFrameless();
+        e.preventDefault();
         return;
       }
       if (this.stage.handleKey(e)) e.preventDefault();
@@ -558,6 +564,21 @@ export class NotebookApp {
     this.stage.applySettings();
   }
 
+  /** Frameless: every panel, toolbar and prop is hidden; only the notebook on the desk remains. */
+  private toggleFrameless(): void {
+    const on = !this.root.hasClass("fv-frameless");
+    this.root.toggleClass("fv-frameless", on);
+    this.stage.setFrameless(on);
+    this.updateStrip();
+    if (on && !this.exitZone) {
+      this.exitZone = this.root.createDiv({ cls: "fv-frameless-zone" });
+      const btn = this.exitZone.createEl("button", { cls: "fv-frameless-exit fv-glass", text: "Show controls (F or Esc)", attr: { type: "button" } });
+      btn.addEventListener("click", () => this.toggleFrameless());
+    }
+  }
+
+  private exitZone: HTMLElement | null = null;
+
   private toggleFocus(): void {
     const on = !this.root.hasClass("fv-focus");
     this.root.toggleClass("fv-focus", on);
@@ -626,7 +647,7 @@ export class NotebookApp {
 
   /** The shelf takes about a quarter of the window, so shelf : desk is roughly 1 : 3. */
   private stripHeight(): number {
-    if (this.host.settings.shelfHidden) return 0;
+    if (this.host.settings.shelfHidden || this.root.hasClass("fv-frameless")) return 0;
     if (this.host.settings.stripCollapsed) return 46;
     const h = this.stage.el.clientHeight || this.root.clientHeight || 900;
     return Math.round(Math.min(300, Math.max(168, h * 0.25)));

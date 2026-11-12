@@ -17,6 +17,7 @@ export interface StageCallbacks {
   toggleSidebar(): void;
   toggleOutline(): void;
   toggleFocus(): void;
+  toggleFrameless(): void;
   modeChanged(mode: ViewMode): void;
   customiseCover(nb: Notebook): void;
   /** Open/closed state, current note or page changed. */
@@ -86,6 +87,7 @@ export class BookStage {
   private indexTimer = 0;
   private writeTool: WriteTool | null = null;
   private wtray: HTMLElement;
+  private frameless = false;
   private laptopExit: HTMLButtonElement;
   private rack: HTMLElement;
   private ribbonEl: HTMLElement;
@@ -504,6 +506,19 @@ export class BookStage {
       case "PageUp":
         void this.prev();
         return true;
+      case "f":
+      case "F":
+        this.cb.toggleFrameless();
+        return true;
+      case "t":
+      case "T":
+        void this.setMode(this.host.settings.viewMode === "text" ? "handwritten" : "text");
+        return true;
+      case "b":
+      case "B":
+        if (!this.isOpen) return false;
+        this.toggleBookmark();
+        return true;
       case "Home":
         if (!this.isOpen) return false;
         void this.goToNote(0);
@@ -538,6 +553,8 @@ export class BookStage {
     this.el.toggleClass("fv-margins", s.marginNotes);
     this.el.setAttr("data-tools", s.toolsSide);
     this.el.toggleClass("fv-lightpages", s.lightPagesInDark);
+    this.el.style.setProperty("--fv-warm", String(clamp(s.pageWarmth, 0, 100) / 100));
+    this.el.toggleClass("fv-warm-on", s.pageWarmth > 0);
     this.rack.setAttr("data-side", s.toolsSide);
     this.el.style.setProperty("--fv-tilt", `${clamp(s.bookTilt, 0, 45)}deg`);
     this.el.toggleClass("fv-ribbon-on", s.ribbon);
@@ -631,9 +648,14 @@ export class BookStage {
     const s = this.host.settings;
     const sc = this.scene;
     const ratio = sc.on ? 0.84 : PAGE_RATIO;
-    const topPad = sc.on ? sc.strip + 22 : 76;
-    const botPad = sc.on ? 76 : 84;
-    const side = sc.on ? clamp(r.width * 0.15, 56, 200) : 40;
+    let topPad = sc.on ? sc.strip + 22 : 76;
+    let botPad = sc.on ? 76 : 84;
+    let side = sc.on ? clamp(r.width * 0.15, 56, 200) : 40;
+    if (this.frameless) {
+      topPad = 34;
+      botPad = 34;
+      side = 40;
+    }
     this.insets = { top: topPad, bottom: botPad };
     this.el.style.setProperty("--fv-top", `${topPad}px`);
     this.el.style.setProperty("--fv-bot", `${botPad}px`);
@@ -644,7 +666,7 @@ export class BookStage {
       pw = maxW;
       ph = pw / ratio;
     }
-    if (sc.on) {
+    if (sc.on && !this.frameless) {
       ph = Math.min(ph, r.width * 0.3);
       pw = ph * ratio;
     }
@@ -1365,6 +1387,20 @@ export class BookStage {
   }
 
   /** Scene layout: the shelf strip takes `strip` px at the top of the stage. */
+  /** Hides all the chrome so only the notebook on the desk is left. */
+  setFrameless(on: boolean): void {
+    if (this.frameless === on) return;
+    this.frameless = on;
+    this.el.toggleClass("is-frameless", on);
+    this.measureSizes();
+    if (this.isOpen) void this.rebuild();
+  }
+
+  /** Something short-lived (laptop, pen in hand, highlight popover) that Escape should dismiss first. */
+  hasTransient(): boolean {
+    return this.laptop.isOpen || this.hlPop.hasClass("is-open") || this.writeTool !== null || this.activePen !== null;
+  }
+
   setScene(on: boolean, strip: number): void {
     if (this.scene.on === on && this.scene.strip === strip) return;
     this.scene = { on, strip };
@@ -2092,6 +2128,7 @@ export class BookStage {
     item("panel-left", "Notebook list", "list", () => this.cb.toggleSidebar());
     item("panel-right", "Outline", "outline", () => this.cb.toggleOutline());
     item("layout-grid", "Shelf mode", "shelf", () => this.cb.shelfRequested());
+    item("eye-off", "Frameless mode (F)", "frameless", () => this.cb.toggleFrameless());
     item("arrow-left-right", this.host.settings.toolsSide === "right" ? "Tools on the left" : "Tools on the right", "toolsside", () => {
       this.host.settings.toolsSide = this.host.settings.toolsSide === "right" ? "left" : "right";
       this.host.saveSettings();

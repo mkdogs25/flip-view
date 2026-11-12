@@ -202,6 +202,8 @@ export interface FlipViewSettings {
   shelfHidden: boolean;
   /** Which side of the desk the pens, highlighters and tools sit on. */
   toolsSide: "left" | "right";
+  /** Warm, sepia tint on the pages for night reading (0 = off). */
+  pageWarmth: number;
   /** Keep the pages light even when the app is in dark mode. */
   lightPagesInDark: boolean;
   /** Page margins as a percentage of the default (100 = as designed). */
@@ -332,6 +334,7 @@ export const DEFAULT_SETTINGS: FlipViewSettings = {
   stripCollapsed: false,
   shelfHidden: false,
   toolsSide: "right",
+  pageWarmth: 0,
   lightPagesInDark: false,
   marginTop: 100,
   marginBottom: 100,

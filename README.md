@@ -21,6 +21,9 @@ in 3D; turn pages to read your notes either as **handwriting** or as **formatted
 - **Custom margins:** top, bottom, spine side and outer, each as a percentage of the default; the text re-flows.
 - **Closing the laptop:** a "Close laptop, back to notebook" button appears while it is up (click the tucked-away notebook, press Esc, or use the browser's x as well).
 - **Little extras:** Home/End jump to the first/last note, an optional mouse-wheel page turn, "~N min to read" on the info card, and "Resume where you left off" to reopen your last page.
+- **Frameless mode:** press F (or use the "..." menu) to hide every panel, toolbar, shelf and prop so only the notebook on the desk is left, bigger. Esc or F brings the controls back; move the mouse to the top edge for a "Show controls" button.
+- **Quick keys:** F frameless, T handwritten/text, B bookmark this page, Home/End first/last note, / search.
+- **Warm page tint** for night reading (settings).
 - **Tilt the notebook** to your liking with the slider in the "..." menu or settings (0 = flat towards you).
 - **Short notes share a spread:** two one-page notes in a row sit side by side instead of each leaving a blank page (switch off in settings). Ink and highlights on the second note's page are made when you open that note on its own.
 - **Maths:** equations render through Obsidian in text view, and handwritten view understands fractions, roots, matrices, cases, `align`, `\text{...}`, binomials, big operators and many more symbols.
