@@ -181,6 +181,13 @@ export interface FlipViewSettings {
   lineVariance: number;
   outlineCollapsed: boolean;
   shelfMode: boolean;
+  /** "scene": shelf of covers above the desk, panels as drawers. "classic": sidebars on either side. */
+  layoutStyle: "scene" | "classic";
+  stripCollapsed: boolean;
+  infoCollapsed: boolean;
+  /** Open a notebook straight away when you pick it from the shelf. */
+  openOnPick: boolean;
+  showPageNumbers: boolean;
 
   // index page
   indexEnabled: boolean;
@@ -286,6 +293,11 @@ export const DEFAULT_SETTINGS: FlipViewSettings = {
   lineVariance: 30,
   outlineCollapsed: false,
   shelfMode: false,
+  layoutStyle: "scene",
+  stripCollapsed: false,
+  infoCollapsed: false,
+  openOnPick: true,
+  showPageNumbers: true,
 
   indexEnabled: true,
   indexTitle: "Contents",

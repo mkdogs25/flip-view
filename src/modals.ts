@@ -42,7 +42,8 @@ export class HelpModal extends Modal {
     const ul = contentEl.createEl("ul");
     [
       "Pick a notebook on the left, then click its cover to flip it open. The shelf button (next to the sidebar button) shows all your notebooks on a shelf; click a spine to pull one out.",
-      "Every notebook starts with a contents page: click an entry to jump to that note.",
+      "Along the top, covers of all your notebooks stand on a shelf: click one and it slides onto the desk. The Notebook Info card has quick appearance controls. Press / to search every note.",
+      "Every notebook starts with a contents page: click an entry to jump to that note. If you've added separator pages, coloured tabs on the book's edge jump to each section.",
       "In handwritten view the pens at the bottom right let you draw and type on the pages; double-click a highlight to recolour it, add a margin note, or remove it.",
       "Turn pages with the arrow keys, the page edges, or the arrows under the book. Turning back past the first page closes the notebook.",
       "Switch between Handwritten and Text at the top. Text uses your own note font; handwriting is generated from the same text.",

@@ -27,6 +27,7 @@ export interface StageCallbacks {
   noteVisited(note: NoteRef, spread: number, spreads: number): void;
   bookmarksChanged(): void;
   shelfRequested(): void;
+  searchRequested(): void;
 }
 
 function penCursor(color: string): string {
@@ -63,6 +64,9 @@ export class BookStage {
   private btnCover: HTMLButtonElement;
   private btnOpenNote: HTMLButtonElement;
   private tray: HTMLElement;
+  private tabsEl: HTMLElement;
+  private scene = { on: false, strip: 0 };
+  private insets = { top: 76, bottom: 84 };
   private laptop: Laptop;
   private drag: { update(x: number): void; release(): void } | null = null;
   private legend: HTMLElement;
@@ -112,7 +116,7 @@ export class BookStage {
     this.toolbar = this.el.createDiv({ cls: "fv-toolbar" });
     const left = this.toolbar.createDiv({ cls: "fv-toolbar-side fv-toolbar-left" });
     iconButton(left, "panel-left", "Toggle notebook list", "fv-glass").addEventListener("click", () => this.cb.toggleSidebar());
-    iconButton(left, "library-big", "Show the shelf", "fv-glass").addEventListener("click", () => this.cb.shelfRequested());
+    iconButton(left, "library-big", "Show the shelf", "fv-glass fv-btn-shelf").addEventListener("click", () => this.cb.shelfRequested());
     this.seg = this.toolbar.createDiv({ cls: "fv-seg" });
     this.seg.createDiv({ cls: "fv-seg-thumb" });
     const mk = (mode: ViewMode, icon: string, label: string) => {
@@ -124,6 +128,7 @@ export class BookStage {
     mk("handwritten", "pencil", "Handwritten");
     mk("text", "type", "Text");
     const right = this.toolbar.createDiv({ cls: "fv-toolbar-side fv-toolbar-right" });
+    iconButton(right, "search", "Find a note", "fv-glass fv-btn-search").addEventListener("click", () => this.cb.searchRequested());
     this.btnShuffle = iconButton(right, "dices", "Shuffle cover design", "fv-glass");
     this.btnShuffle.addEventListener("click", () => this.shuffleCover());
     this.btnCover = iconButton(right, "palette", "Cover options", "fv-glass");
@@ -213,11 +218,16 @@ export class BookStage {
       void this.followRibbon();
     });
     this.hlPop = this.el.createDiv({ cls: "fv-hlpop fv-glass" });
-    this.wtray = this.el.createDiv({ cls: "fv-wtray" });
+    this.tabsEl = this.book.createDiv({ cls: "fv-tabs" });
+    const cupW = this.el.createDiv({ cls: "fv-cup fv-cup-write" });
+    this.wtray = cupW.createDiv({ cls: "fv-wtray" });
+    cupW.createDiv({ cls: "fv-cup-body" });
     this.book.addEventListener("pointerdown", (e) => this.onInkDown(e));
     this.book.addEventListener("dblclick", (e) => this.onDblClick(e));
     document.addEventListener("pointerdown", this.onDocPointerDown, true);
-    this.tray = this.el.createDiv({ cls: "fv-tray" });
+    const cupH = this.el.createDiv({ cls: "fv-cup fv-cup-hl" });
+    this.tray = cupH.createDiv({ cls: "fv-tray" });
+    cupH.createDiv({ cls: "fv-cup-body" }).createSpan({ cls: "fv-cup-star", text: "✦" });
     this.legend = this.el.createDiv({ cls: "fv-legend" });
     this.sfx = new Sfx(() => host.settings);
     document.addEventListener("pointerup", this.onPointerUp);
@@ -409,6 +419,7 @@ export class BookStage {
     for (const l of ["classic", "realistic", "wide"]) this.el.toggleClass(`fv-pl-${l}`, s.pageLayout === l);
     this.el.toggleClass("fv-margins", s.marginNotes);
     this.el.toggleClass("fv-ribbon-on", s.ribbon);
+    this.el.toggleClass("fv-nofolio", !s.showPageNumbers);
     const body = handFontInfo(s.handFont);
     const head = s.headingFont === "same" ? body : handFontInfo(s.headingFont);
     this.el.style.setProperty("--fv-heading-font", `"${head.family}", "Segoe Print", "Bradley Hand", cursive`);
@@ -495,9 +506,13 @@ export class BookStage {
   private measureSizes(): void {
     const r = this.el.getBoundingClientRect();
     const s = this.host.settings;
-    const topPad = 76;
-    const botPad = 84;
-    const side = 40;
+    const sc = this.scene;
+    const topPad = sc.on ? sc.strip + 64 : 76;
+    const botPad = sc.on ? 76 : 84;
+    const side = sc.on ? clamp(r.width * 0.15, 56, 200) : 40;
+    this.insets = { top: topPad, bottom: botPad };
+    this.el.style.setProperty("--fv-top", `${topPad}px`);
+    this.el.style.setProperty("--fv-bot", `${botPad}px`);
     let ph = Math.min(r.height - topPad - botPad, 980);
     let pw = ph * PAGE_RATIO;
     const maxW = (r.width - side * 2) / 2;
@@ -1005,7 +1020,8 @@ export class BookStage {
   /** Where the closed notebook sits on the desk, in stage coordinates. */
   closedCoverRect(): { cx: number; cy: number; w: number; h: number } {
     const r = this.el.getBoundingClientRect();
-    return { cx: r.width / 2, cy: 76 + (r.height - 76 - 84) / 2, w: this.metrics.pw, h: this.metrics.ph };
+    const { top, bottom } = this.insets;
+    return { cx: r.width / 2, cy: top + (r.height - top - bottom) / 2, w: this.metrics.pw, h: this.metrics.ph };
   }
 
   /** A finished copy of the closed cover (waits for it to be painted), used as the flying book's front. */
@@ -1086,8 +1102,45 @@ export class BookStage {
         this.refreshFolios();
       }
     } else if (!open) this.shownKey = "";
+    this.renderTabs();
     this.updateLaptopLayout();
     this.cb.stateChanged();
+  }
+
+  /** Coloured divider tabs on the book's edge: Contents, then one per separator page (section). */
+  private renderTabs(): void {
+    const nb = this.notebook;
+    this.tabsEl.empty();
+    this.tabsEl.toggleClass("is-hidden", !this.isOpen || !nb);
+    if (!nb || !this.isOpen) return;
+    const sections = nb.notes.map((n, i) => ({ n, i })).filter((x) => isSeparator(x.n));
+    if (sections.length === 0) return;
+    const palette = ["#8bc34a", "#7e57c2", "#ff9800", "#42a5f5", "#ffca28", "#ef5350", "#26a69a"];
+    const entries = [...nb.notes.map((n, i) => ({ n, i })).filter((x) => isIndex(x.n)), ...sections];
+    let current = -1;
+    entries.forEach((e) => {
+      if (e.i <= this.noteIdx) current = e.i;
+    });
+    entries.forEach((e, k) => {
+      const tab = this.tabsEl.createEl("button", { cls: "fv-tab", attr: { type: "button", title: e.n.title, "aria-label": `Go to ${e.n.title}` } });
+      tab.style.setProperty("--tab", palette[k % palette.length]);
+      tab.toggleClass("is-current", e.i === current);
+      tab.createSpan({ cls: "fv-tab-text", text: e.n.title });
+      tab.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        void this.goTo(e.i);
+      });
+    });
+  }
+
+  /** Scene layout: the shelf strip takes `strip` px at the top of the stage. */
+  setScene(on: boolean, strip: number): void {
+    if (this.scene.on === on && this.scene.strip === strip) return;
+    this.scene = { on, strip };
+    this.el.toggleClass("fv-scene-stage", on);
+    this.el.style.setProperty("--fv-strip", `${strip}px`);
+    this.measureSizes();
+    if (this.isOpen) void this.rebuild();
   }
 
   /* -------------------------------------------- page tally, index and crawl */
@@ -1281,7 +1334,9 @@ export class BookStage {
     s.highlighters.forEach((p, i) => {
       const pen = this.tray.createEl("button", { cls: "fv-pen", attr: { type: "button", "aria-label": `Highlighter: ${p.label || p.color}`, title: p.label || p.color } });
       pen.style.setProperty("--pen", p.color);
-      pen.style.setProperty("--r", `${(i - (n - 1) / 2) * 4}deg`);
+      pen.style.setProperty("--r", `${(i - (n - 1) / 2) * 7}deg`);
+      pen.style.setProperty("--i", String(i));
+      pen.style.setProperty("--n", String(n));
       pen.toggleClass("is-active", i === this.activePen);
       pen.createDiv({ cls: "fv-pen-cap" });
       pen.createDiv({ cls: "fv-pen-body" });
@@ -1416,6 +1471,9 @@ export class BookStage {
       });
       if (tool === "pen" || tool === "pencil" || tool === "marker") b.style.setProperty("--pen", s.writeColors[tool]);
       b.toggleClass("is-active", this.writeTool === tool);
+      b.style.setProperty("--i", String(defs.findIndex((d) => d[0] === tool)));
+      b.style.setProperty("--n", String(defs.length));
+      b.style.setProperty("--r", `${(defs.findIndex((d) => d[0] === tool) - 2) * 6}deg`);
       b.createDiv({ cls: "fv-pen-cap" });
       b.createDiv({ cls: "fv-pen-body" });
       b.createDiv({ cls: "fv-pen-tip" });

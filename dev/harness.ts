@@ -26,6 +26,7 @@ if (q.get("layout")) settings.pageLayout = q.get("layout") as FlipViewSettings["
 if (q.get("spine")) settings.spineStyle = q.get("spine") as FlipViewSettings["spineStyle"];
 if (q.get("band")) settings.bandStyle = q.get("band") as FlipViewSettings["bandStyle"];
 if (q.get("margins") === "0") settings.marginNotes = false;
+settings.layoutStyle = q.get("scene") ? "scene" : "classic";
 if (q.get("anim")) settings.animation = q.get("anim") as FlipViewSettings["animation"];
 
 const galaxy = `data:image/svg+xml;utf8,${encodeURIComponent(

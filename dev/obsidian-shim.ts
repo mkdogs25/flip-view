@@ -10,6 +10,7 @@ function apply(el: HTMLElement, o?: Info): void {
   }
   if (o.cls) el.className = Array.isArray(o.cls) ? o.cls.join(" ") : o.cls;
   if (o.text !== undefined) el.textContent = o.text;
+  if ((o as { value?: string }).value !== undefined) (el as HTMLInputElement).value = (o as { value?: string }).value as string;
   if (o.attr) for (const [k, v] of Object.entries(o.attr)) if (v !== null && v !== false) el.setAttribute(k, String(v));
 }
 
@@ -88,6 +89,12 @@ const ICON_PATHS: Record<string, string> = {
   "library-big": "M5 3h4v18H5zM11 3h4v18h-4zM17 5l3 1-4 15-3-1z",
   "notebook-text": "M6 3h12v18H6zM9 8h6M9 12h6",
   list: "M8 6h13M8 12h13M8 18h13M3 6h.1M3 12h.1M3 18h.1",
+  "layout-grid": "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
+  "chevron-up": "M5 15l7-7 7 7",
+  calendar: "M5 5h14v15H5zM5 10h14M9 3v4M15 3v4",
+  "bar-chart-3": "M5 20V10M12 20V4M19 20v-8",
+  hash: "M5 9h14M5 15h14M10 4L8 20M16 4l-2 16",
+  "book-open": "M3 5c3-1 6-1 9 1 3-2 6-2 9-1v14c-3-1-6-1-9 1-3-2-6-2-9-1z",
   clock: "M12 3a9 9 0 100 18 9 9 0 000-18zM12 7v5l3 2",
 };
 

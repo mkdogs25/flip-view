@@ -7,7 +7,10 @@ import { Bookmark, Notebook, NotebookHost, NoteRef, ViewMode, isNote, realNoteCo
 import { BookStage } from "./book";
 import { iconButton, progressEl } from "./dom";
 import { OutlinePanel } from "./outline";
+import { InfoPanel } from "./infopanel";
+import { SearchPop } from "./searchpop";
 import { Shelf } from "./shelf";
+import { TopShelf } from "./topshelf";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 let uid = 0;
@@ -22,6 +25,11 @@ export class NotebookApp {
   private stage: BookStage;
   private outline: OutlinePanel;
   private shelf: Shelf;
+  private topShelf: TopShelf;
+  private info: InfoPanel;
+  private search: SearchPop;
+  private drawers = false;
+  private pickBusy = false;
   private recentEl: HTMLElement;
   private progressTimer = 0;
   private displace: SVGElement;
@@ -116,6 +124,29 @@ export class NotebookApp {
       noteVisited: (note, spread, spreads) => this.noteVisited(note, spread, spreads),
       bookmarksChanged: () => this.refreshOutline(),
       shelfRequested: () => void this.showShelf(),
+      searchRequested: () => this.search.toggle(),
+    });
+    this.topShelf = new TopShelf(this.stage.el, host, {
+      pick: (nb, el) => void this.pickFromTop(nb, el),
+      create: () => host.createNotebook(),
+      fullShelf: () => void this.showShelf(),
+      collapse: (c) => this.setStripCollapsed(c),
+    });
+    this.info = new InfoPanel(this.stage.el, host, {
+      changed: () => {
+        this.applySettings();
+        this.refreshProgress();
+      },
+      regenerate: (nb) => this.regenerate(nb),
+      openSettings: () => host.openSettings(),
+    });
+    this.search = new SearchPop(this.stage.el, {
+      go: (path) => void this.goToPath(path),
+      pickNotebook: (nb) => {
+        const el = this.topShelf.coverEl(nb.id);
+        if (el) void this.pickFromTop(nb, el);
+        else this.select(nb.id);
+      },
     });
     this.shelf = new Shelf(this.stage.el, host, {
       pick: (nb, spine) => void this.pickFromShelf(nb, spine),
@@ -143,6 +174,15 @@ export class NotebookApp {
       }
       if (e.key === "Escape" && this.root.hasClass("fv-focus") && !this.stage.currentNotebook()?.notes.length) {
         this.toggleFocus();
+        return;
+      }
+      if (e.key === "/" && !(e.target as HTMLElement).closest("input, textarea, [contenteditable]")) {
+        e.preventDefault();
+        this.search.open();
+        return;
+      }
+      if (e.key === "Escape" && this.search.isOpen) {
+        this.search.close();
         return;
       }
       if (this.stage.handleKey(e)) e.preventDefault();
@@ -178,6 +218,7 @@ export class NotebookApp {
     this.renderRecent();
     this.shelf.render(list, this.selectedId);
     this.stage.setNotebook(sel ?? null);
+    this.renderScene();
     this.renderEmpty(list.length === 0);
   }
 
@@ -189,7 +230,8 @@ export class NotebookApp {
     this.host.saveSettings();
     this.renderList();
     this.stage.setNotebook(nb);
-    if (this.narrow) this.setSidebarCollapsed(true);
+    if (this.drawers) this.setSidebarCollapsed(true);
+    this.renderScene();
     this.root.focus({ preventScroll: true });
   }
 
@@ -217,6 +259,12 @@ export class NotebookApp {
     this.root.toggleClass("fv-dark", dark);
     this.root.toggleClass("fv-light", !dark);
     this.root.toggleClass("fv-no-desk", !s.showDesk);
+    const scene = s.layoutStyle === "scene";
+    this.root.toggleClass("fv-scene", scene);
+    this.root.toggleClass("fv-classic", !scene);
+    this.updateDrawerMode();
+    this.topShelf.setCollapsed(scene && s.stripCollapsed);
+    this.stage.setScene(scene, scene ? this.stripHeight() : 0);
     const font = handFontInfo(s.handFont);
     const r = this.root.style;
     r.setProperty("--fv-hand-font", `"${font.family}", "Segoe Print", "Bradley Hand", cursive`);
@@ -228,6 +276,7 @@ export class NotebookApp {
     this.displace.setAttribute("scale", String(1 + (s.messiness / 100) * 4));
     this.stage.applySettings();
     this.renderList();
+    this.renderScene();
   }
 
   destroy(): void {
@@ -251,7 +300,7 @@ export class NotebookApp {
 
   private setSidebarCollapsed(collapsed: boolean): void {
     this.root.toggleClass("is-sidebar-collapsed", collapsed);
-    if (!this.narrow) {
+    if (!this.drawers) {
       this.host.settings.sidebarCollapsed = collapsed;
       this.host.saveSettings();
     }
@@ -260,7 +309,7 @@ export class NotebookApp {
   private toggleOutline(): void {
     const collapsed = !this.root.hasClass("is-outline-collapsed");
     this.root.toggleClass("is-outline-collapsed", collapsed);
-    if (!this.narrow) {
+    if (!this.drawers) {
       this.host.settings.outlineCollapsed = collapsed;
       this.host.saveSettings();
     }
@@ -442,6 +491,7 @@ export class NotebookApp {
     this.renderRecent();
     this.stage.refreshProgress();
     if (this.shelf.isOpen) this.shelf.render(this.notebooks, this.selectedId);
+    this.renderScene();
     this.refreshOutline();
   }
 
@@ -493,11 +543,82 @@ export class NotebookApp {
 
   private checkNarrow(): void {
     const narrow = this.root.clientWidth > 0 && this.root.clientWidth < 760;
-    if (narrow === this.narrow) return;
-    this.narrow = narrow;
-    this.root.toggleClass("is-narrow", narrow);
-    this.root.toggleClass("is-sidebar-collapsed", narrow ? true : this.host.settings.sidebarCollapsed);
-    this.root.toggleClass("is-outline-collapsed", narrow ? true : this.host.settings.outlineCollapsed);
+    if (narrow !== this.narrow) {
+      this.narrow = narrow;
+      this.root.toggleClass("is-narrow", narrow);
+      this.updateDrawerMode();
+    }
+  }
+
+  /** Panels are slide-out drawers in the scene layout and on narrow panes; fixed sidebars otherwise. */
+  private updateDrawerMode(): void {
+    const scene = this.host.settings.layoutStyle === "scene";
+    const drawers = scene || this.narrow;
+    const changed = drawers !== this.drawers;
+    this.drawers = drawers;
+    this.root.toggleClass("fv-drawers", drawers);
+    if (changed) {
+      this.root.toggleClass("is-sidebar-collapsed", drawers ? true : this.host.settings.sidebarCollapsed);
+      this.root.toggleClass("is-outline-collapsed", drawers ? true : this.host.settings.outlineCollapsed);
+    }
+  }
+
+  /* ------------------------------------------------------------ the scene */
+
+  private stripHeight(): number {
+    return this.host.settings.stripCollapsed ? 46 : 236;
+  }
+
+  private setStripCollapsed(c: boolean): void {
+    this.host.settings.stripCollapsed = c;
+    this.host.saveSettings();
+    this.topShelf.setCollapsed(c);
+    this.stage.setScene(true, this.stripHeight());
+  }
+
+  /** Shelf covers, the info card and the search list follow the notebooks and the current selection. */
+  private renderScene(): void {
+    if (this.host.settings.layoutStyle !== "scene") return;
+    this.topShelf.render(this.notebooks, this.selectedId, !!this.stage.currentNotebook());
+    this.info.render(this.notebooks.find((n) => n.id === this.selectedId) ?? null);
+    this.search.setBooks(this.notebooks);
+  }
+
+  private regenerate(nb: Notebook): void {
+    this.host.settings.coverSeeds[nb.id] = (Math.random() * 0xffffffff) >>> 0;
+    this.host.saveSettings();
+    this.stage.applySettings();
+    this.renderScene();
+  }
+
+  /**
+   * Pick a cover from the shelf: it slides off the shelf, lands on the desk and (optionally) opens.
+   * The previous notebook goes back on the shelf.
+   */
+  private async pickFromTop(nb: Notebook, el: HTMLElement): Promise<void> {
+    if (this.pickBusy) return;
+    this.pickBusy = true;
+    try {
+      const s = this.host.settings;
+      const from = this.topShelf.rectOf(nb.id);
+      if (this.stage.isBookOpen()) await this.stage.close(true);
+      this.selectedId = nb.id;
+      s.lastNotebook = nb.id;
+      this.host.saveSettings();
+      this.renderList();
+      this.stage.setCoverHidden(true);
+      this.stage.setNotebook(nb);
+      this.info.render(nb);
+      this.topShelf.render(this.notebooks, nb.id, true);
+      const face = await this.stage.coverClone();
+      this.stage.playSfx("pull");
+      if (from) await this.topShelf.fly(face, from, this.stage.closedCoverRect(), this.animMs(1150), () => this.stage.playSfx("land"));
+      this.stage.setCoverHidden(false);
+      if (s.openOnPick) await this.stage.open(0);
+      void el;
+    } finally {
+      this.pickBusy = false;
+    }
   }
 
   private renderList(): void {

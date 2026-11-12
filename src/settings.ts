@@ -90,6 +90,23 @@ export class FlipViewSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName("Look").setHeading();
 
     new Setting(containerEl)
+      .setName("Layout")
+      .setDesc("Scene: a shelf of covers above the desk, with the notebook list and outline as slide-out drawers. Classic: sidebars on either side.")
+      .addDropdown((d) =>
+        d
+          .addOption("scene", "Scene (shelf + desk)")
+          .addOption("classic", "Classic (sidebars)")
+          .setValue(s.layoutStyle)
+          .onChange((v) => ((s.layoutStyle = v as "scene" | "classic"), save())),
+      );
+    new Setting(containerEl)
+      .setName("Open the notebook when picked from the shelf")
+      .addToggle((t) => t.setValue(s.openOnPick).onChange((v) => ((s.openOnPick = v), save())));
+    new Setting(containerEl)
+      .setName("Page numbers")
+      .setDesc("Print a page number on each page.")
+      .addToggle((t) => t.setValue(s.showPageNumbers).onChange((v) => ((s.showPageNumbers = v), save())));
+    new Setting(containerEl)
       .setName("Colour mode")
       .setDesc("Auto follows Obsidian's light or dark theme.")
       .addDropdown((d) =>
