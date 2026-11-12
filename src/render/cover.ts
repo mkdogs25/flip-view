@@ -5,6 +5,7 @@ type RGB = [number, number, number];
 type ConcreteStyle = Exclude<CoverStyle, "random">;
 
 export const COVER_STYLES: ConcreteStyle[] = [
+  "storybook",
   "cosmic",
   "leather",
   "linen",
@@ -59,6 +60,9 @@ export interface CoverResult {
   style: ConcreteStyle;
   /** Mid-tone of the cover, used to tint the elastic band and end-papers. */
   base: string;
+  /** Title colour that reads well on this cover, and whether the cover is light. */
+  ink: string;
+  lightCover: boolean;
   dark: string;
   light: string;
 }
@@ -151,6 +155,8 @@ interface Theme {
   base: RGB;
   dark: RGB;
   light: RGB;
+  ink?: string;
+  lightCover?: boolean;
 }
 
 /* ------------------------------------------------------------------ cosmic */
@@ -813,6 +819,302 @@ function paintDenim(ctx: Ctx, rng: Rng, seed: number, tint: Tint | null): Theme 
   return { base, dark: mix(base, [0, 0, 0], 0.5), light: [232, 166, 74] };
 }
 
+/* -------------------------------------------------------------- storybook */
+
+function vGradient(ctx: Ctx, a: RGB, b: RGB): void {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, rgba(a));
+  g.addColorStop(1, rgba(b));
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function leaf(ctx: Ctx, x: number, y: number, len: number, ang: number, fill: string, stroke?: string): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(ang);
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.bezierCurveTo(len * 0.25, -len * 0.32, len * 0.7, -len * 0.26, len, 0);
+  ctx.bezierCurveTo(len * 0.7, len * 0.26, len * 0.25, len * 0.32, 0, 0);
+  ctx.fillStyle = fill;
+  ctx.fill();
+  if (stroke) {
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(len * 0.92, 0);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function starField(ctx: Ctx, rng: Rng, n: number, tone: RGB = [245, 232, 200]): void {
+  for (let i = 0; i < n; i++) {
+    ctx.fillStyle = rgba(tone, rng.range(0.25, 0.95));
+    ctx.beginPath();
+    ctx.arc(rng.range(0, W), rng.range(0, H * 0.8), Math.pow(rng.float(), 3) * 1.8 + 0.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/** Ornate gold double frame with corner flourishes, like a gilded hardcover. */
+function goldFrame(ctx: Ctx, col: RGB): void {
+  ctx.save();
+  ctx.strokeStyle = rgba(col, 0.92);
+  ctx.lineWidth = 3.4;
+  roundedRect(ctx, 30, 30, W - 60, H - 60, 12);
+  ctx.stroke();
+  ctx.lineWidth = 1.4;
+  roundedRect(ctx, 42, 42, W - 84, H - 84, 6);
+  ctx.stroke();
+  ctx.fillStyle = rgba(col, 0.95);
+  for (const [cx, cy, sx, sy] of [[42, 42, 1, 1], [W - 42, 42, -1, 1], [42, H - 42, 1, -1], [W - 42, H - 42, -1, -1]] as const) {
+    ctx.beginPath();
+    ctx.arc(cx + sx * 16, cy + sy * 16, 11, sx > 0 ? Math.PI : 0, sx > 0 ? Math.PI * 1.5 : Math.PI * 0.5, false);
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(cx + sx * 7, cy + sy * 7, 3.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  for (const [x, y] of [[W / 2, 42], [W / 2, H - 42], [42, H / 2], [W - 42, H / 2]]) {
+    ctx.beginPath();
+    ctx.moveTo(x, y - 7);
+    ctx.lineTo(x + 7, y);
+    ctx.lineTo(x, y + 7);
+    ctx.lineTo(x - 7, y);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function paintStorybook(ctx: Ctx, rng: Rng, seed: number, tint: Tint | null): Theme {
+  const gold: RGB = [226, 186, 104];
+  const kind = tint ? "castle" : rng.pick(["castle", "botanical", "planet", "forest", "blossom", "star"] as const);
+  let theme: Theme;
+  if (kind === "castle") {
+    const h = tint ? tint.h : rng.range(255, 285);
+    vGradient(ctx, hsl(h, 0.5, 0.22), hsl(h, 0.6, 0.07));
+    starField(ctx, rng, 140);
+    const glow = ctx.createRadialGradient(W * 0.5, H * 0.3, 20, W * 0.5, H * 0.3, 260);
+    glow.addColorStop(0, "rgba(255,214,140,.38)");
+    glow.addColorStop(1, "rgba(255,214,140,0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = rgba(gold);
+    ctx.beginPath();
+    ctx.arc(W * 0.5, H * 0.3, 112, Math.PI * 0.62, Math.PI * 1.55, false);
+    ctx.arc(W * 0.5 + 52, H * 0.3 - 24, 98, Math.PI * 1.5, Math.PI * 0.62, true);
+    ctx.fill();
+    sparkleAt(ctx, W * 0.68, H * 0.2, 16, gold);
+    sparkleAt(ctx, W * 0.27, H * 0.34, 11, gold);
+    // castle silhouette
+    const base = hsl(h, 0.45, 0.045);
+    ctx.fillStyle = rgba(base);
+    const towers: Array<[number, number, number]> = [[0.2, 0.1, 0.62], [0.33, 0.12, 0.55], [0.5, 0.16, 0.5], [0.68, 0.12, 0.57], [0.8, 0.1, 0.64]];
+    ctx.fillRect(W * 0.12, H * 0.76, W * 0.76, H * 0.3);
+    for (const [cx, tw, top] of towers) {
+      const x = W * cx - (W * tw) / 2;
+      ctx.fillRect(x, H * (top + 0.1), W * tw, H * 0.4);
+      ctx.beginPath();
+      ctx.moveTo(x - 6, H * (top + 0.1));
+      ctx.lineTo(x + (W * tw) / 2, H * (top - 0.02));
+      ctx.lineTo(x + W * tw + 6, H * (top + 0.1));
+      ctx.fill();
+    }
+    ctx.fillStyle = "rgba(255,206,110,.9)";
+    for (let i = 0; i < 14; i++) ctx.fillRect(rng.range(W * 0.16, W * 0.82), rng.range(H * 0.7, H * 0.88), 7, 11);
+    theme = { base: hsl(h, 0.5, 0.3), dark: hsl(h, 0.6, 0.08), light: gold, ink: "#f6ecd2" };
+  } else if (kind === "botanical") {
+    vGradient(ctx, [247, 238, 218], [232, 214, 178]);
+    const cx = W / 2;
+    const cy = H * 0.34;
+    ctx.strokeStyle = "#7d5a3a";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy + 40);
+    ctx.bezierCurveTo(cx + 30, cy + 160, cx - 36, cy + 260, cx, H * 0.78);
+    ctx.stroke();
+    leaf(ctx, cx + 4, cy + 150, 120, -0.5, "#a8b98a", "#7d8a5e");
+    leaf(ctx, cx - 4, cy + 200, 110, Math.PI + 0.55, "#a8b98a", "#7d8a5e");
+    for (let i = 0; i < 9; i++) {
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate((i / 9) * Math.PI * 2);
+      const g = ctx.createLinearGradient(0, 0, 0, -130);
+      g.addColorStop(0, "#f3c9a8");
+      g.addColorStop(1, "#e99aa0");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.ellipse(0, -72, 30, 66, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(120,70,50,.55)";
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.fillStyle = "#e9b04f";
+    ctx.beginPath();
+    ctx.arc(cx, cy, 24, 0, Math.PI * 2);
+    ctx.fill();
+    for (let i = 0; i < 26; i++) {
+      ctx.fillStyle = "rgba(125,90,58,.35)";
+      ctx.beginPath();
+      ctx.arc(rng.range(60, W - 60), rng.range(60, H - 60), rng.range(1, 3), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    theme = { base: [200, 160, 120], dark: [110, 80, 54], light: gold, ink: "#4a3524", lightCover: true };
+  } else if (kind === "planet") {
+    const h = rng.range(215, 245);
+    vGradient(ctx, hsl(h, 0.55, 0.16), hsl(h, 0.6, 0.06));
+    starField(ctx, rng, 170);
+    const cx = W * 0.52;
+    const cy = H * 0.32;
+    const r = 104;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(-0.4);
+    const ring = (front: boolean) => {
+      ctx.beginPath();
+      ctx.ellipse(0, 0, r * 2.05, r * 0.52, 0, front ? 0 : Math.PI, front ? Math.PI : Math.PI * 2);
+      ctx.strokeStyle = rgba(gold, 0.9);
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(0, 0, r * 1.65, r * 0.4, 0, front ? 0 : Math.PI, front ? Math.PI : Math.PI * 2);
+      ctx.strokeStyle = rgba(gold, 0.45);
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    };
+    ring(false);
+    const g = ctx.createRadialGradient(-r * 0.35, -r * 0.35, 6, 0, 0, r);
+    g.addColorStop(0, "#c9a3e8");
+    g.addColorStop(0.5, "#6b4fa8");
+    g.addColorStop(1, "#1b1240");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = rgba(gold, 0.7);
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ring(true);
+    ctx.restore();
+    ctx.strokeStyle = rgba(gold, 0.35);
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + 20, 330, 120, -0.4, 0.2, 2.9);
+    ctx.stroke();
+    sparkleAt(ctx, W * 0.2, H * 0.22, 14, gold);
+    sparkleAt(ctx, W * 0.82, H * 0.5, 12, gold);
+    theme = { base: hsl(h, 0.5, 0.26), dark: hsl(h, 0.6, 0.07), light: gold, ink: "#f6ecd2" };
+  } else if (kind === "forest") {
+    vGradient(ctx, [30, 66, 48], [12, 32, 24]);
+    for (const side of [0, 1]) {
+      ctx.strokeStyle = rgba(gold, 0.8);
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      const x0 = side ? W - 84 : 84;
+      ctx.moveTo(x0, 70);
+      for (let y = 70; y < H - 70; y += 40) ctx.lineTo(x0 + Math.sin(y / 60 + side) * 26, y + 40);
+      ctx.stroke();
+      for (let y = 100; y < H - 90; y += 52) {
+        const x = x0 + Math.sin(y / 60 + side) * 26;
+        leaf(ctx, x, y, 54, (side ? Math.PI : 0) + rng.range(-0.8, -0.2), rgba(gold, 0.55), rgba(gold, 0.9));
+        leaf(ctx, x, y + 22, 44, (side ? Math.PI : 0) + rng.range(0.2, 0.8), "rgba(120,170,110,.5)", "rgba(190,220,150,.8)");
+      }
+    }
+    // a gilded fern at the heart of the cover
+    for (let i = -5; i <= 5; i++) {
+      leaf(ctx, W / 2, H * 0.52, 190 - Math.abs(i) * 14, -Math.PI / 2 + i * 0.22, "rgba(226,186,104,.18)", rgba(gold, 0.85));
+    }
+    sparkleAt(ctx, W * 0.5, H * 0.14, 15, gold);
+    theme = { base: [40, 90, 62], dark: [12, 30, 22], light: gold, ink: "#f1e6c6" };
+  } else if (kind === "blossom") {
+    vGradient(ctx, [238, 190, 205], [214, 140, 166]);
+    ctx.strokeStyle = "#6b4636";
+    ctx.lineCap = "round";
+    const branch: Array<[number, number]> = [[W + 20, 120], [W * 0.78, 190], [W * 0.55, 230], [W * 0.3, 300], [-20, 340]];
+    ctx.lineWidth = 9;
+    ctx.beginPath();
+    branch.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
+    ctx.stroke();
+    ctx.lineWidth = 4;
+    for (const [x, y] of branch.slice(1, 4)) {
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - 40, y - 70 + rng.range(-20, 20));
+      ctx.stroke();
+    }
+    const blossom = (x: number, y: number, r: number) => {
+      for (let i = 0; i < 5; i++) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate((i / 5) * Math.PI * 2 + rng.range(-0.1, 0.1));
+        ctx.fillStyle = "#fff1f4";
+        ctx.strokeStyle = "rgba(200,100,130,.7)";
+        ctx.lineWidth = 1.3;
+        ctx.beginPath();
+        ctx.ellipse(0, -r * 0.62, r * 0.42, r * 0.62, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+      ctx.fillStyle = "#e6a23c";
+      ctx.beginPath();
+      ctx.arc(x, y, r * 0.14, 0, Math.PI * 2);
+      ctx.fill();
+    };
+    for (let i = 0; i < 12; i++) blossom(rng.range(W * 0.08, W * 0.92), rng.range(120, 360), rng.range(20, 36));
+    for (let i = 0; i < 18; i++) {
+      ctx.fillStyle = "rgba(255,241,244,.8)";
+      ctx.beginPath();
+      ctx.ellipse(rng.range(40, W - 40), rng.range(380, H - 60), 6, 3.5, rng.range(0, 3), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    theme = { base: [220, 150, 172], dark: [130, 60, 84], light: gold, ink: "#5a2c3c", lightCover: true };
+  } else {
+    vGradient(ctx, [24, 20, 18], [8, 7, 6]);
+    const cx = W / 2;
+    const cy = H * 0.31;
+    ctx.strokeStyle = rgba(gold, 0.5);
+    ctx.lineWidth = 1.4;
+    for (let i = 0; i < 48; i++) {
+      const a = (i / 48) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * 70, cy + Math.sin(a) * 70);
+      ctx.lineTo(cx + Math.cos(a) * (i % 2 ? 150 : 210), cy + Math.sin(a) * (i % 2 ? 150 : 210));
+      ctx.stroke();
+    }
+    const g = ctx.createRadialGradient(cx, cy, 4, cx, cy, 110);
+    g.addColorStop(0, "#fff1bd");
+    g.addColorStop(1, "#c8952e");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2 - Math.PI / 2;
+      const rr = i % 2 ? 36 : 112;
+      ctx.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+    }
+    ctx.closePath();
+    ctx.fill();
+    starField(ctx, rng, 70, [226, 186, 104]);
+    theme = { base: [60, 48, 30], dark: [8, 7, 6], light: gold, ink: "#f1dfb0" };
+  }
+  goldFrame(ctx, gold);
+  addGrain(ctx, seed, 12);
+  return theme;
+}
+
+function sparkleAt(ctx: Ctx, x: number, y: number, s: number, col: RGB): void {
+  ctx.fillStyle = rgba(col, 0.95);
+  sparkle(ctx, x, y, s);
+}
+
 /* ------------------------------------------------------------------ finish */
 
 function finish(ctx: Ctx, rng: Rng): void {
@@ -905,6 +1207,9 @@ export function generateCover(seed: number, requested: CoverStyle, color = "", l
     case "waves":
       theme = paintWaves(ctx, rng, seed, tint);
       break;
+    case "storybook":
+      theme = paintStorybook(ctx, rng, seed, tint);
+      break;
     case "suede":
       theme = paintSuede(ctx, rng, seed, tint);
       break;
@@ -931,6 +1236,8 @@ export function generateCover(seed: number, requested: CoverStyle, color = "", l
     url: canvas.toDataURL("image/jpeg", 0.88),
     style,
     base: rgba(theme.base),
+    ink: theme.ink ?? "#f4ecd8",
+    lightCover: theme.lightCover ?? false,
     dark: rgba(theme.dark),
     light: rgba(theme.light),
   };

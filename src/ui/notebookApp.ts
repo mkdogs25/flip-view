@@ -125,6 +125,7 @@ export class NotebookApp {
       bookmarksChanged: () => this.refreshOutline(),
       shelfRequested: () => void this.showShelf(),
       searchRequested: () => this.search.toggle(),
+      openSettings: () => host.openSettings(),
     });
     this.topShelf = new TopShelf(this.stage.el, host, {
       pick: (nb, el) => void this.pickFromTop(nb, el),
@@ -566,7 +567,7 @@ export class NotebookApp {
   /* ------------------------------------------------------------ the scene */
 
   private stripHeight(): number {
-    return this.host.settings.stripCollapsed ? 46 : 236;
+    return this.host.settings.stripCollapsed ? 46 : 272;
   }
 
   private setStripCollapsed(c: boolean): void {

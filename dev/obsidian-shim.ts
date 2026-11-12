@@ -95,6 +95,7 @@ const ICON_PATHS: Record<string, string> = {
   "bar-chart-3": "M5 20V10M12 20V4M19 20v-8",
   hash: "M5 9h14M5 15h14M10 4L8 20M16 4l-2 16",
   "book-open": "M3 5c3-1 6-1 9 1 3-2 6-2 9-1v14c-3-1-6-1-9 1-3-2-6-2-9-1z",
+  ellipsis: "M5 12h.1M12 12h.1M19 12h.1",
   clock: "M12 3a9 9 0 100 18 9 9 0 000-18zM12 7v5l3 2",
 };
 

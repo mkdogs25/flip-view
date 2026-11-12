@@ -3,6 +3,7 @@ import { notebookProgress } from "../progress";
 import { Notebook, NotebookHost, realNoteCount } from "../types";
 import { coverFor, resolveLook } from "./coverStyle";
 import { progressEl } from "./dom";
+import { propEl } from "./props";
 
 export interface TopShelfCallbacks {
   pick(nb: Notebook, el: HTMLElement): void;
@@ -31,12 +32,16 @@ export class TopShelf {
   constructor(parent: HTMLElement, private host: NotebookHost, private cb: TopShelfCallbacks) {
     this.el = parent.createDiv({ cls: "fv-topshelf" });
     this.el.createDiv({ cls: "fv-wall" });
+    this.el.createDiv({ cls: "fv-ts-rays" });
     const props = this.el.createDiv({ cls: "fv-ts-props" });
-    for (const side of ["left", "right"]) {
-      const plant = props.createDiv({ cls: `fv-bigplant is-${side}` });
-      for (let i = 1; i <= 5; i++) plant.createDiv({ cls: `fv-plant-leaf l${i}` });
-      plant.createDiv({ cls: "fv-plant-pot" });
-    }
+    props.createDiv({ cls: "fv-ladder" });
+    props.appendChild(propEl("plant", "fv-prop-plant is-left"));
+    props.appendChild(propEl("plant", "fv-prop-plant is-right"));
+    new ResizeObserver(() => {
+      const w = this.el.clientWidth;
+      this.el.toggleClass("is-narrow", w < 1240);
+      this.el.toggleClass("is-tiny", w < 900);
+    }).observe(this.el);
     this.row = this.el.createDiv({ cls: "fv-ts-row" });
     this.el.createDiv({ cls: "fv-ts-plank" });
     const full = this.el.createEl("button", { cls: "fv-ts-full fv-glass", attr: { type: "button" } });
@@ -104,6 +109,8 @@ export class TopShelf {
           const cov = coverFor(s, nb, true);
           art.style.backgroundImage = `url(${cov.url})`;
           art.style.setProperty("--sc-base", cov.base);
+          art.style.setProperty("--sc-ink", cov.ink);
+          art.style.setProperty("--sc-shade", cov.lightCover ? "0.05" : "0.55");
           if (!look.ribbonColor || look.ribbonColor === s.ribbonColor) ribbon.style.setProperty("--rib", cov.light);
           sc.addClass("is-ready");
         } catch {
@@ -118,6 +125,9 @@ export class TopShelf {
     setIcon(add.createDiv({ cls: "fv-sc-new-icon" }), "plus");
     add.createDiv({ cls: "fv-sc-new-text", text: "New notebook" });
     add.addEventListener("click", () => this.cb.create());
+    // little figures standing at the end of the row, like the reference
+    this.row.appendChild(propEl("globe", "fv-prop-inline fv-prop-globe"));
+    this.row.appendChild(propEl("astronaut", "fv-prop-inline fv-prop-astro"));
     this.row.scrollLeft = scroll;
     // low-resolution covers one per tick so the strip appears at once
     const token = ++this.lastPaint;

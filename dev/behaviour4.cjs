@@ -67,10 +67,14 @@ const url = (qs) => "file://" + path.join(__dirname, "dist/harness.html") + "?sc
   assert((await page.textContent(".fv-foot-title")) === "Part Two: Heat", "clicking a tab jumps to that section");
 
   // drawers
-  await page.click("button[aria-label='Toggle notebook list']");
+  await page.click(".fv-btn-more");
+  await wait(250);
+  await page.click(".fv-more-item[data-id='list']");
   await wait(400);
-  assert(await page.$eval(".fv-sidebar", (e) => getComputedStyle(e).display !== "none"), "the list drawer slides open");
-  await page.click("button[aria-label='Toggle notebook list']");
+  assert(await page.$eval(".fv-sidebar", (e) => getComputedStyle(e).display !== "none"), "the list drawer opens from the more menu");
+  await page.click(".fv-btn-more");
+  await wait(250);
+  await page.click(".fv-more-item[data-id='list']");
 
   // fold the shelf
   const before = await page.$eval(".fv-book", (e) => e.getBoundingClientRect().height);

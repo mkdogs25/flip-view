@@ -28,6 +28,7 @@ export interface StageCallbacks {
   bookmarksChanged(): void;
   shelfRequested(): void;
   searchRequested(): void;
+  openSettings(): void;
 }
 
 function penCursor(color: string): string {
@@ -64,6 +65,7 @@ export class BookStage {
   private btnCover: HTMLButtonElement;
   private btnOpenNote: HTMLButtonElement;
   private tray: HTMLElement;
+  private moreMenu: HTMLElement;
   private tabsEl: HTMLElement;
   private scene = { on: false, strip: 0 };
   private insets = { top: 76, bottom: 84 };
@@ -115,8 +117,8 @@ export class BookStage {
     // toolbar
     this.toolbar = this.el.createDiv({ cls: "fv-toolbar" });
     const left = this.toolbar.createDiv({ cls: "fv-toolbar-side fv-toolbar-left" });
-    iconButton(left, "panel-left", "Toggle notebook list", "fv-glass").addEventListener("click", () => this.cb.toggleSidebar());
-    iconButton(left, "library-big", "Show the shelf", "fv-glass fv-btn-shelf").addEventListener("click", () => this.cb.shelfRequested());
+    iconButton(left, "panel-left", "Toggle notebook list", "fv-glass fv-tb-extra").addEventListener("click", () => this.cb.toggleSidebar());
+    iconButton(left, "library-big", "Show the shelf", "fv-glass fv-btn-shelf fv-tb-extra").addEventListener("click", () => this.cb.shelfRequested());
     this.seg = this.toolbar.createDiv({ cls: "fv-seg" });
     this.seg.createDiv({ cls: "fv-seg-thumb" });
     const mk = (mode: ViewMode, icon: string, label: string) => {
@@ -127,20 +129,30 @@ export class BookStage {
     };
     mk("handwritten", "pencil", "Handwritten");
     mk("text", "type", "Text");
-    const right = this.toolbar.createDiv({ cls: "fv-toolbar-side fv-toolbar-right" });
+    const right = this.toolbar.createDiv({ cls: "fv-toolbar-side fv-toolbar-right fv-tgroup" });
+    this.btnBookmark = iconButton(right, "bookmark", "Bookmark this page", "fv-glass");
+    this.btnBookmark.addEventListener("click", () => this.toggleBookmark());
     iconButton(right, "search", "Find a note", "fv-glass fv-btn-search").addEventListener("click", () => this.cb.searchRequested());
-    this.btnShuffle = iconButton(right, "dices", "Shuffle cover design", "fv-glass");
+    this.btnShuffle = iconButton(right, "dices", "Shuffle cover design", "fv-glass fv-tb-extra");
     this.btnShuffle.addEventListener("click", () => this.shuffleCover());
-    this.btnCover = iconButton(right, "palette", "Cover options", "fv-glass");
+    this.btnCover = iconButton(right, "palette", "Cover options", "fv-glass fv-tb-extra");
     this.btnCover.addEventListener("click", () => this.notebook && this.cb.customiseCover(this.notebook));
     iconButton(right, "maximize", "Full screen", "fv-glass").addEventListener("click", () => this.cb.toggleFocus());
-    iconButton(right, "panel-right", "Toggle outline", "fv-glass").addEventListener("click", () => this.cb.toggleOutline());
-    this.btnClose = iconButton(right, "x", "Close notebook", "fv-glass");
+    iconButton(right, "panel-right", "Toggle outline", "fv-glass fv-tb-extra").addEventListener("click", () => this.cb.toggleOutline());
+    this.btnClose = iconButton(right, "x", "Close notebook", "fv-glass fv-tb-extra");
     this.btnClose.addEventListener("click", () => void this.close());
+    const more = iconButton(right, "ellipsis", "More", "fv-glass fv-btn-more");
+    more.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.toggleMore();
+    });
+    this.moreMenu = this.el.createDiv({ cls: "fv-more fv-glass" });
 
     // the book
     this.wrap = this.el.createDiv({ cls: "fv-bookwrap" });
-    this.book = this.wrap.createDiv({ cls: "fv-book is-closed" });
+    const tilt = this.wrap.createDiv({ cls: "fv-tilt" });
+    this.book = tilt.createDiv({ cls: "fv-book is-closed" });
+    this.book.createDiv({ cls: "fv-boards" });
     this.leftBase = this.book.createDiv({ cls: "fv-pagebase fv-left" });
     this.rightBase = this.book.createDiv({ cls: "fv-pagebase fv-right" });
     this.book.createDiv({ cls: "fv-gutter" });
@@ -189,17 +201,20 @@ export class BookStage {
     setIcon(this.lastEdit.createSpan({ cls: "fv-lastedit-icon" }), "clock");
     this.lastEditText = this.lastEdit.createDiv({ cls: "fv-lastedit-text" });
     this.hint = this.el.createDiv({ cls: "fv-hint" });
+    this.el.createDiv({ cls: "fv-deco" });
 
     this.footer = this.el.createDiv({ cls: "fv-footer" });
     this.footerOpen = this.footer.createDiv({ cls: "fv-footer-open fv-glass" });
     this.btnPrev = iconButton(this.footerOpen, "chevron-left", "Previous page");
     this.btnPrev.addEventListener("click", () => void this.prev());
     this.footTitle = this.footerOpen.createEl("button", { cls: "fv-foot-title", attr: { type: "button", "aria-label": "Contents" } });
-    this.footCount = this.footerOpen.createSpan({ cls: "fv-foot-count" });
+    this.footCount = this.footerOpen.createEl("button", { cls: "fv-foot-count", attr: { type: "button", "aria-label": "Contents" } });
+    this.footCount.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.toggleToc();
+    });
     this.btnNext = iconButton(this.footerOpen, "chevron-right", "Next page");
     this.btnNext.addEventListener("click", () => void this.next());
-    this.btnBookmark = iconButton(this.footerOpen, "bookmark", "Bookmark this page");
-    this.btnBookmark.addEventListener("click", () => this.toggleBookmark());
     this.btnOpenNote = iconButton(this.footerOpen, "file-text", "Open this note");
     this.btnOpenNote.addEventListener("click", (e) => {
       const n = this.currentNote();
@@ -507,21 +522,26 @@ export class BookStage {
     const r = this.el.getBoundingClientRect();
     const s = this.host.settings;
     const sc = this.scene;
-    const topPad = sc.on ? sc.strip + 64 : 76;
+    const ratio = sc.on ? 0.84 : PAGE_RATIO;
+    const topPad = sc.on ? sc.strip + 22 : 76;
     const botPad = sc.on ? 76 : 84;
     const side = sc.on ? clamp(r.width * 0.15, 56, 200) : 40;
     this.insets = { top: topPad, bottom: botPad };
     this.el.style.setProperty("--fv-top", `${topPad}px`);
     this.el.style.setProperty("--fv-bot", `${botPad}px`);
     let ph = Math.min(r.height - topPad - botPad, 980);
-    let pw = ph * PAGE_RATIO;
+    let pw = ph * ratio;
     const maxW = (r.width - side * 2) / 2;
     if (pw > maxW) {
       pw = maxW;
-      ph = pw / PAGE_RATIO;
+      ph = pw / ratio;
+    }
+    if (sc.on) {
+      ph = Math.min(ph, r.width * 0.3);
+      pw = ph * ratio;
     }
     ph = Math.max(ph, 180);
-    pw = ph * PAGE_RATIO;
+    pw = ph * ratio;
     const scale = ph / 660;
     const pt = ph * (s.pageLayout === "realistic" ? 0.095 : 0.085);
     const pb = ph * (s.pageLayout === "realistic" ? 0.115 : 0.1);
@@ -992,6 +1012,11 @@ export class BookStage {
         this.coverBack.style.setProperty("--fv-cover-dark", res.dark);
         this.coverBack.style.setProperty("--fv-cover-light", res.light);
         this.cover.setAttr("data-cover", res.style);
+        this.coverFront.style.setProperty("--fv-cover-ink", res.ink);
+        this.coverFront.toggleClass("is-light-cover", res.lightCover);
+        this.book.style.setProperty("--fv-cover-base", res.base);
+        this.book.style.setProperty("--fv-cover-dark", res.dark);
+        this.book.style.setProperty("--fv-cover-img", `url(${res.url})`);
       } catch (err) {
         console.error("[flip-view] cover generation failed", err);
       }
@@ -1077,9 +1102,10 @@ export class BookStage {
     this.btnOpenNote.toggleClass("is-hidden", sep);
     this.lastEdit.toggleClass("is-visible", open && !!note && !sep && this.host.settings.showLastEdited);
     if (note) {
+      const seen = this.host.settings.trackProgress ? this.host.settings.readState[note.path] : undefined;
       this.lastEditText.empty();
-      this.lastEditText.createDiv({ text: "Last edited:" });
-      this.lastEditText.createDiv({ text: formatDate(note.mtime) });
+      this.lastEditText.createDiv({ text: seen ? "Last read:" : "Last edited:" });
+      this.lastEditText.createDiv({ text: formatDate(seen ? seen.last : note.mtime) });
     }
     if (open && note && this.notebook) {
       this.footTitle.setText(note.title);
@@ -1686,6 +1712,7 @@ export class BookStage {
 
   private onDocPointerDown = (e: PointerEvent): void => {
     if (this.hlPop.hasClass("is-open") && !this.hlPop.contains(e.target as Node)) this.closeHlPop();
+    if (this.moreMenu.hasClass("is-open") && !this.moreMenu.contains(e.target as Node)) this.moreMenu.removeClass("is-open");
   };
 
   private closeHlPop(): void {
@@ -1835,6 +1862,34 @@ export class BookStage {
 
   tick(): void {
     this.sfx.tick();
+  }
+
+  private toggleMore(): void {
+    const m = this.moreMenu;
+    if (m.hasClass("is-open")) {
+      m.removeClass("is-open");
+      return;
+    }
+    m.empty();
+    const item = (icon: string, label: string, id: string, fn: () => void) => {
+      const b = m.createEl("button", { cls: "fv-more-item", attr: { type: "button", "data-id": id } });
+      setIcon(b.createSpan({ cls: "fv-more-icon" }), icon);
+      b.createSpan({ text: label });
+      b.addEventListener("click", () => {
+        m.removeClass("is-open");
+        fn();
+      });
+    };
+    item("panel-left", "Notebook list", "list", () => this.cb.toggleSidebar());
+    item("panel-right", "Outline", "outline", () => this.cb.toggleOutline());
+    item("layout-grid", "Shelf mode", "shelf", () => this.cb.shelfRequested());
+    if (this.notebook && !this.isOpen) {
+      item("palette", "Cover options", "cover", () => this.notebook && this.cb.customiseCover(this.notebook));
+      item("dices", "Shuffle cover", "shuffle", () => this.shuffleCover());
+    }
+    if (this.isOpen) item("x", "Close notebook", "close", () => void this.close());
+    item("settings", "Settings", "settings", () => this.cb.openSettings());
+    m.addClass("is-open");
   }
 
   private toggleToc(): void {

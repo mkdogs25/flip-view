@@ -114,6 +114,7 @@ export class PromptModal extends Modal {
 }
 
 export const COVER_STYLE_OPTIONS: Array<[CoverStyle, string]> = [
+  ["storybook", "Storybook (illustrated)"],
   ["random", "Random"],
   ["cosmic", "Cosmic"],
   ["leather", "Leather"],

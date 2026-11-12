@@ -468,7 +468,7 @@
   transition: transform 0.85s cubic-bezier(0.5, 0.05, 0.2, 1), opacity 0.4s;
 }
 
-.fv-bookwrap > .fv-book {
+.fv-bookwrap .fv-book {
   pointer-events: auto;
 }
 
@@ -788,7 +788,8 @@
 .fv-cover-front {
   cursor: pointer;
   background-color: #2b2140;
-  background-size: 100% 100%;
+  background-size: cover;
+  background-position: center;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07), inset -2px 0 3px rgba(255, 255, 255, 0.08), 0 1px 0 rgba(0, 0, 0, 0.4);
   outline-offset: 3px;
 }
@@ -4062,7 +4063,7 @@
   left: 0;
   right: 0;
   top: 0;
-  height: var(--fv-strip, 236px);
+  height: var(--fv-strip, 272px);
   z-index: 30;
   transition: height 0.5s cubic-bezier(0.3, 0.8, 0.3, 1);
 }
@@ -4441,7 +4442,7 @@
 /* toolbar sits under the strip on the right */
 
 .fv-scene-stage .fv-toolbar {
-  top: calc(var(--fv-strip, 236px) + 12px);
+  top: calc(var(--fv-strip, 272px) + 12px);
   justify-content: flex-end;
   gap: 10px;
   transition: top 0.5s cubic-bezier(0.3, 0.8, 0.3, 1);
@@ -4474,7 +4475,7 @@
   left: 16px;
   bottom: 16px;
   width: 262px;
-  max-height: calc(100% - var(--fv-strip, 236px) - 200px);
+  max-height: calc(100% - var(--fv-strip, 272px) - 200px);
   overflow-y: auto;
   padding: 10px 14px 14px;
   border-radius: 16px;
@@ -4773,12 +4774,12 @@
 
 .fv-cup-hl {
   left: 30px;
-  top: calc(var(--fv-strip, 236px) + 6px);
+  top: calc(var(--fv-strip, 272px) + 6px);
 }
 
 .fv-cup-write {
   right: 34px;
-  top: calc(var(--fv-strip, 236px) + 330px);
+  top: calc(var(--fv-strip, 272px) + 330px);
 }
 
 .fv-classic .fv-cup-hl {
@@ -4897,7 +4898,7 @@
 .fv-scene-stage .fv-legend {
   left: auto;
   right: 26px;
-  top: calc(var(--fv-strip, 236px) + 78px);
+  top: calc(var(--fv-strip, 272px) + 78px);
 }
 
 .fv-scene-stage .fv-lastedit {
@@ -5054,4 +5055,526 @@
   .fv-cup-hl {
     display: none;
   }
+}
+
+/* ===================================================================== */
+/* REDESIGN: a lived-in scene, after the reference                        */
+/* ===================================================================== */
+
+.fv-root.fv-dark {
+  --fv-wall-a: #4a3d37;
+  --fv-wall-b: #2a2220;
+  --fv-wall-glow: rgba(255, 150, 60, 0.34);
+  --fv-brick-1: #3d322d;
+  --fv-brick-2: #463a34;
+  --fv-brick-3: #342b27;
+  --fv-mortar: #241d1a;
+}
+
+.fv-root.fv-light {
+  --fv-wall-a: #efe3cf;
+  --fv-wall-b: #e0d0b4;
+  --fv-wall-glow: rgba(255, 232, 170, 0.5);
+  --fv-brick-1: #e8dac2;
+  --fv-brick-2: #efe2cc;
+  --fv-brick-3: #e1d1b6;
+  --fv-mortar: #cdbb9c;
+}
+
+/* the wall: offset bricks, then warm light over the top */
+.fv-wall {
+  background:
+    radial-gradient(ellipse 55% 100% at 92% 10%, var(--fv-wall-glow), transparent 70%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.32)),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='132' height='44'><rect width='132' height='44' fill='%23000' fill-opacity='.0'/><g fill='%23fff' fill-opacity='.045'><rect x='1' y='1' width='64' height='20' rx='2'/><rect x='67' y='1' width='64' height='20' rx='2'/><rect x='-31' y='23' width='64' height='20' rx='2'/><rect x='35' y='23' width='64' height='20' rx='2'/><rect x='101' y='23' width='64' height='20' rx='2'/></g><g fill='%23000' fill-opacity='.09'><rect x='67' y='23' width='30' height='20' rx='2'/><rect x='1' y='1' width='20' height='20' rx='2'/></g></svg>"),
+    var(--fv-wall-a);
+  box-shadow: inset 0 -44px 60px -30px rgba(0, 0, 0, 0.6), inset 0 24px 40px -20px rgba(0, 0, 0, 0.35);
+}
+
+.fv-root.fv-dark .fv-wall {
+  background-color: #3a2f2b;
+  background-image:
+    radial-gradient(ellipse 55% 100% at 92% 10%, var(--fv-wall-glow), transparent 70%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.35)),
+    repeating-linear-gradient(0deg, var(--fv-mortar) 0 3px, transparent 3px 22px),
+    repeating-linear-gradient(90deg, var(--fv-mortar) 0 3px, transparent 3px 66px),
+    linear-gradient(180deg, var(--fv-brick-2), var(--fv-brick-3));
+}
+
+.fv-root.fv-light .fv-wall {
+  background-color: #e8dac2;
+  background-image:
+    radial-gradient(ellipse 55% 100% at 92% 10%, var(--fv-wall-glow), transparent 70%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(120, 90, 50, 0.16)),
+    repeating-linear-gradient(0deg, var(--fv-mortar) 0 2px, transparent 2px 22px),
+    repeating-linear-gradient(90deg, var(--fv-mortar) 0 2px, transparent 2px 66px),
+    linear-gradient(180deg, var(--fv-brick-2), var(--fv-brick-1));
+}
+
+.fv-ts-rays {
+  position: absolute;
+  inset: 0 0 22px 0;
+  z-index: 1;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  background: conic-gradient(from 188deg at 106% -14%, transparent 0 4deg, rgba(255, 190, 110, 0.22) 6deg 10deg, transparent 12deg 18deg, rgba(255, 190, 110, 0.15) 20deg 25deg,
+      transparent 27deg 34deg, rgba(255, 190, 110, 0.1) 36deg 39deg, transparent 41deg);
+}
+
+.fv-root.fv-light .fv-ts-rays {
+  mix-blend-mode: soft-light;
+  opacity: 0.8;
+}
+
+.fv-ts-plank {
+  height: 30px;
+  bottom: 22px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0 3px, transparent 3px),
+    linear-gradient(180deg, var(--fv-board-1), var(--fv-board-2) 72%, var(--fv-board-edge));
+  z-index: 3;
+}
+
+.fv-ts-row {
+  padding: 14px 230px 52px 190px;
+  gap: 24px;
+  z-index: 4;
+}
+
+/* covers, bigger and more ornate */
+.fv-root .fv-sc {
+  width: 150px;
+  height: 206px;
+}
+
+.fv-sc-art {
+  border-radius: 3px 8px 8px 3px;
+  box-shadow: 3px 8px 14px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.fv-sc-art::after {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.02) 38%, rgba(0, 0, 0, var(--sc-shade, 0.55)) 100%);
+}
+
+.fv-sc-label {
+  color: var(--sc-ink, #fff);
+  padding-bottom: 13px;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+.fv-sc-art[style*="--sc-shade: 0.05"] ~ * .fv-sc-label,
+.fv-sc-art[style*="--sc-shade: 0.05"] .fv-sc-label {
+  text-shadow: none;
+}
+
+.fv-sc-title {
+  font-size: 22px;
+  letter-spacing: 0.01em;
+}
+
+.fv-sc-title[data-len="1"] {
+  font-size: 18px;
+}
+
+.fv-sc-title[data-len="2"] {
+  font-size: 14px;
+}
+
+.fv-sc-count {
+  font-size: 12.5px;
+}
+
+.fv-sc-prog .fv-prog {
+  color: #b99cf5;
+}
+
+.fv-sc-art[style*="--sc-shade: 0.05"] .fv-sc-prog .fv-prog-bar {
+  background: rgba(60, 40, 20, 0.22);
+}
+
+.fv-sc-ribbon {
+  width: 13px;
+  height: 26px;
+  left: 62%;
+}
+
+/* props */
+.fv-prop {
+  position: absolute;
+  bottom: 40px;
+  pointer-events: none;
+}
+
+.fv-prop svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  filter: drop-shadow(0 8px 8px rgba(0, 0, 0, 0.4));
+}
+
+.fv-prop-plant {
+  width: 150px;
+  height: 252px;
+  z-index: 2;
+}
+
+.fv-prop-plant.is-left {
+  left: 22px;
+}
+
+.fv-prop-plant.is-right {
+  right: 36px;
+  transform: scaleX(-1);
+}
+
+.fv-prop-inline {
+  position: relative;
+  bottom: auto;
+  flex: none;
+  align-self: flex-end;
+  margin-bottom: -4px;
+}
+
+.fv-prop-globe {
+  width: 90px;
+  height: 120px;
+  margin-left: 14px;
+}
+
+.fv-prop-astro {
+  width: 58px;
+  height: 100px;
+  margin-left: -6px;
+}
+
+.fv-root .fv-sc-new {
+  width: 96px;
+}
+
+.fv-ladder {
+  position: absolute;
+  right: -34px;
+  bottom: 22px;
+  width: 92px;
+  height: 252px;
+  transform: rotate(13deg);
+  transform-origin: 50% 100%;
+  background:
+    linear-gradient(90deg, #8a5c35 0 11px, transparent 11px calc(100% - 11px), #7a4f2c calc(100% - 11px)),
+    repeating-linear-gradient(180deg, transparent 0 34px, #8a5c35 34px 42px);
+  box-shadow: 4px 6px 10px rgba(0, 0, 0, 0.35);
+  opacity: 0.92;
+}
+
+.fv-topshelf.is-narrow .fv-prop-inline,
+.fv-topshelf.is-narrow .fv-ladder,
+.fv-topshelf.is-tiny .fv-prop {
+  display: none;
+}
+
+.fv-topshelf.is-collapsed .fv-prop,
+.fv-topshelf.is-collapsed .fv-ladder,
+.fv-topshelf.is-collapsed .fv-ts-rays {
+  display: none;
+}
+
+/* ---------------------------------------------- the book lies on the desk */
+
+.fv-tilt {
+  position: relative;
+  transform: perspective(2200px) rotateX(var(--fv-tilt, 17deg));
+  transform-origin: 50% 80%;
+  transition: transform 0.55s cubic-bezier(0.3, 0.8, 0.3, 1);
+}
+
+.fv-stage.is-writing .fv-tilt {
+  --fv-tilt: 0deg;
+}
+
+.fv-boards {
+  position: absolute;
+  inset: -14px -17px -18px;
+  z-index: 0;
+  border-radius: 12px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s 0.2s;
+  background-color: var(--fv-cover-dark, #1d1530);
+  background-image: linear-gradient(150deg, rgba(255, 255, 255, 0.1), rgba(0, 0, 0, 0.45)), var(--fv-cover-img, none);
+  background-size: cover, cover;
+  background-position: center;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.08), inset 0 0 0 7px rgba(0, 0, 0, 0.25), 0 36px 40px -12px rgba(0, 0, 0, 0.65), 0 10px 18px rgba(0, 0, 0, 0.35);
+}
+
+.fv-book.is-open .fv-boards {
+  opacity: 1;
+}
+
+.fv-book.is-closing .fv-boards {
+  opacity: 0;
+  transition-delay: 0s;
+}
+
+.fv-book::before {
+  display: none;
+}
+
+.fv-tabs {
+  right: -26px;
+  top: 7%;
+  z-index: 3;
+}
+
+.fv-ribbon {
+  bottom: -46px;
+  height: 64px;
+  width: 15px;
+  z-index: 3;
+}
+
+/* ------------------------------------------------ toolbar, after the reference */
+
+.fv-tgroup {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 14px;
+  background: var(--fv-glass-bg);
+  border: 1px solid var(--fv-glass-border);
+  box-shadow: 0 8px 22px rgba(20, 10, 0, 0.25);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+
+.fv-tgroup .fv-iconbtn.fv-glass {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: none;
+  border: 0;
+  box-shadow: none;
+}
+
+.fv-root .fv-tgroup .fv-iconbtn.fv-glass:hover {
+  background: var(--fv-glass-hover);
+}
+
+.fv-btn-more {
+  display: none;
+}
+
+.fv-scene-stage .fv-btn-more {
+  display: inline-flex;
+}
+
+.fv-scene-stage .fv-tb-extra {
+  display: none;
+}
+
+.fv-scene-stage .fv-toolbar {
+  top: calc(var(--fv-strip, 272px) + 26px);
+  left: auto;
+  right: 22px;
+}
+
+.fv-scene-stage .fv-toolbar-left {
+  display: none;
+}
+
+.fv-seg {
+  border-radius: 14px;
+}
+
+.fv-seg-thumb,
+.fv-root .fv-seg-btn {
+  border-radius: 11px;
+}
+
+.fv-more {
+  position: absolute;
+  top: calc(var(--fv-strip, 272px) + 82px);
+  right: 22px;
+  z-index: 75;
+  display: flex;
+  flex-direction: column;
+  min-width: 190px;
+  padding: 6px;
+  border-radius: 14px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-6px);
+  transition: opacity 0.16s, transform 0.16s;
+}
+
+.fv-more.is-open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
+.fv-root .fv-more-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  font-size: 13px;
+  text-align: left;
+  color: var(--fv-glass-text);
+}
+
+.fv-root .fv-more-item:hover {
+  background: color-mix(in srgb, var(--fv-accent) 22%, transparent);
+  box-shadow: none;
+}
+
+.fv-more-icon {
+  display: inline-flex;
+  color: var(--fv-glass-muted);
+}
+
+.fv-more-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* ---------------------------------------------------------- footer pill */
+
+.fv-scene-stage .fv-foot-title {
+  display: none;
+}
+
+.fv-root .fv-foot-count {
+  padding: 4px 14px;
+  border-radius: 999px;
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  color: var(--fv-glass-text);
+}
+
+.fv-root .fv-foot-count:hover {
+  background: var(--fv-glass-hover);
+  box-shadow: none;
+}
+
+.fv-scene-stage .fv-footer-open {
+  padding: 6px 10px;
+  border-radius: 14px;
+}
+
+/* ---------------------------------------------------- desk and its things */
+
+.fv-scene-stage .fv-legend {
+  right: 26px;
+  top: calc(var(--fv-strip, 272px) + 112px);
+}
+
+.fv-cup-hl {
+  top: calc(var(--fv-strip, 272px) + 4px);
+}
+
+.fv-cup-write {
+  top: calc(var(--fv-strip, 272px) + 330px);
+  right: 38px;
+}
+
+.fv-cup-hl::after {
+  content: "";
+  position: absolute;
+  left: -6px;
+  right: -6px;
+  bottom: -8px;
+  height: 26px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 40%, var(--fv-cup-a), var(--fv-cup-b) 70%);
+  box-shadow: 0 8px 14px rgba(0, 0, 0, 0.45);
+  z-index: 2;
+}
+
+.fv-cup-write .fv-cup-body {
+  background:
+    linear-gradient(62deg, transparent 38%, rgba(226, 186, 104, 0.55) 39% 40%, transparent 41%),
+    linear-gradient(118deg, transparent 52%, rgba(226, 186, 104, 0.4) 53% 54%, transparent 55%),
+    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.2), transparent 40%),
+    linear-gradient(90deg, #17121f, #3b3550 45%, #120e1a);
+}
+
+.fv-root.fv-light .fv-cup-write .fv-cup-body {
+  background:
+    linear-gradient(62deg, transparent 38%, rgba(160, 120, 50, 0.45) 39% 40%, transparent 41%),
+    linear-gradient(118deg, transparent 52%, rgba(160, 120, 50, 0.35) 53% 54%, transparent 55%),
+    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.5), transparent 40%),
+    linear-gradient(90deg, #cfc3ad, #f2ead9 45%, #bfb298);
+}
+
+.fv-deco {
+  position: absolute;
+  right: -46px;
+  bottom: -34px;
+  width: 230px;
+  height: 160px;
+  z-index: 2;
+  transform: rotate(-11deg);
+  border-radius: 10px;
+  background: linear-gradient(145deg, #6a6e78, #3d4048);
+  box-shadow: 0 14px 22px rgba(0, 0, 0, 0.5), inset 0 0 0 2px rgba(255, 255, 255, 0.07);
+  pointer-events: none;
+}
+
+.fv-classic .fv-deco {
+  display: none;
+}
+
+.fv-scene-stage .fv-lastedit {
+  right: 22px;
+  bottom: 22px;
+  z-index: 14;
+}
+
+/* clean lettering on the closed cover */
+.fv-label-clean .fv-plate {
+  top: 60%;
+  width: 70%;
+  background: none;
+  box-shadow: none;
+  color: var(--fv-cover-ink, #f4ecd8);
+}
+
+.fv-label-clean .fv-plate::before {
+  display: none;
+}
+
+.fv-label-clean .fv-plate-title {
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.55);
+}
+
+.fv-label-clean .is-light-cover .fv-plate-title,
+.fv-label-clean .is-light-cover .fv-plate-count {
+  text-shadow: none;
+}
+
+.fv-label-clean .fv-plate-count,
+.fv-label-clean .fv-plate-prog .fv-prog {
+  color: inherit;
+}
+
+/* the info card, glassier */
+.fv-info {
+  border-radius: 18px;
+  width: 270px;
+}
+
+.fv-root.fv-dark .fv-info,
+.fv-root.fv-dark .fv-tgroup,
+.fv-root.fv-dark .fv-seg {
+  background: rgba(24, 20, 34, 0.8);
+}
+
+/* sunset over the whole scene */
+.fv-scene-stage::before {
+  background:
+    conic-gradient(from 196deg at 108% -8%, transparent 0 5deg, rgba(255, 180, 90, 0.1) 7deg 11deg, transparent 13deg 22deg, rgba(255, 180, 90, 0.07) 24deg 28deg, transparent 30deg),
+    radial-gradient(ellipse 55% 45% at 94% 36%, var(--fv-wall-glow), transparent 72%),
+    radial-gradient(ellipse 130% 70% at 50% 135%, rgba(0, 0, 0, 0.55), transparent 62%);
 }

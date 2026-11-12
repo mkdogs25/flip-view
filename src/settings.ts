@@ -147,6 +147,7 @@ export class FlipViewSettingTab extends PluginSettingTab {
       .setName("Cover label")
       .addDropdown((d) =>
         d
+          .addOption("clean", "Clean lettering")
           .addOption("plate", "Cream name plate")
           .addOption("foil", "Gold foil lettering")
           .addOption("sticker", "Paper sticker")

@@ -47,8 +47,9 @@ export type CoverStyle =
   | "canvas"
   | "cork"
   | "woodgrain"
-  | "denim";
-export type CoverLabel = "plate" | "foil" | "sticker";
+  | "denim"
+  | "storybook";
+export type CoverLabel = "plate" | "foil" | "sticker" | "clean";
 export type SpineStyle = "plain" | "banded" | "striped" | "foil" | "label" | "ribbed";
 export type BandStyle = "none" | "vertical" | "horizontal" | "double";
 export type PaperColor = "cream" | "white" | "ivory" | "yellow" | "grey" | "blue" | "sepia" | "custom";
@@ -271,7 +272,7 @@ export const DEFAULT_SETTINGS: FlipViewSettings = {
   viewMode: "handwritten",
   theme: "auto",
   showDesk: true,
-  coverStyle: "random",
+  coverStyle: "storybook",
   paperStyle: "plain",
   animation: "full",
   flipMode: "click",
@@ -279,7 +280,7 @@ export const DEFAULT_SETTINGS: FlipViewSettings = {
   showLastEdited: true,
   accentColor: "",
   coverColor: "",
-  coverLabel: "plate",
+  coverLabel: "clean",
   bandStyle: "vertical",
   bandColor: "",
   spineStyle: "banded",
