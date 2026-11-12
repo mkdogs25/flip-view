@@ -129,6 +129,20 @@ export class Shelf {
     void s;
   }
 
+  /** A font size that lets the name wrap into as many vertical lines as the spine is wide enough for. */
+  private titleSize(name: string, w: number, h: number, label: boolean): number {
+    const room = h * (label ? 0.46 : 0.62) - 10; // along the spine
+    const across = w * (label ? 0.76 : 1) - 6; // how many lines can sit side by side
+    const chars = Math.max(1, name.length);
+    let best = 8;
+    for (const lines of [1, 2, 3, 4]) {
+      const longest = lines === 1 ? chars : Math.ceil(chars / lines) + 2; // words rarely split evenly
+      const size = Math.min(15, room / (longest * 0.64), across / (lines * 1.15));
+      best = Math.max(best, size);
+    }
+    return Math.round(best * 10) / 10;
+  }
+
   private spineWidth(nb: Notebook): number {
     return clamp(26 + realNoteCount(nb) * 3.4, 30, 64);
   }
@@ -154,7 +168,8 @@ export class Shelf {
     if (band) spine.style.setProperty("--sp-band", band);
     spine.createDiv({ cls: "fv-spine-tex" });
     spine.createDiv({ cls: "fv-spine-deco" });
-    spine.createDiv({ cls: "fv-spine-title", text: nb.name });
+    const titleEl = spine.createDiv({ cls: "fv-spine-title", text: nb.name });
+    titleEl.style.fontSize = `${this.titleSize(nb.name, w, h, look.spine === "label")}px`;
     spine.createDiv({ cls: "fv-spine-count", text: String(realNoteCount(nb)) });
     if (s.trackProgress && s.progressShelf) {
       const prog = notebookProgress(nb, s);

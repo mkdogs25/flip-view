@@ -2112,6 +2112,14 @@ export class BookStage {
       item("palette", "Cover options", "cover", () => this.notebook && this.cb.customiseCover(this.notebook));
       item("dices", "Shuffle cover", "shuffle", () => this.shuffleCover());
     }
+    if (this.notebook && realNoteCount(this.notebook) > 1) {
+      item("shuffle", "Surprise me (random note)", "random", () => {
+        const nb = this.notebook;
+        if (!nb) return;
+        const picks = nb.notes.map((n, i) => (isNote(n) && i !== this.noteIdx ? i : -1)).filter((i) => i >= 0);
+        if (picks.length) void this.goToNote(picks[Math.floor(Math.random() * picks.length)]);
+      });
+    }
     if (this.isOpen) item("x", "Close notebook", "close", () => void this.close());
     item("settings", "Settings", "settings", () => this.cb.openSettings());
     m.addClass("is-open");
