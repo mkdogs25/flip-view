@@ -544,6 +544,7 @@ export class NotebookApp {
 
   private checkNarrow(): void {
     const narrow = this.root.clientWidth > 0 && this.root.clientWidth < 760;
+    this.updateStrip();
     if (narrow !== this.narrow) {
       this.narrow = narrow;
       this.root.toggleClass("is-narrow", narrow);
@@ -593,8 +594,19 @@ export class NotebookApp {
     window.setTimeout(next, 0);
   }
 
+  /** The shelf takes about a quarter of the window, so shelf : desk is roughly 1 : 3. */
   private stripHeight(): number {
-    return this.host.settings.stripCollapsed ? 46 : 272;
+    if (this.host.settings.stripCollapsed) return 46;
+    const h = this.stage.el.clientHeight || this.root.clientHeight || 900;
+    return Math.round(Math.min(300, Math.max(168, h * 0.25)));
+  }
+
+  private stripTimer = 0;
+
+  private updateStrip(): void {
+    if (this.host.settings.layoutStyle !== "scene") return;
+    window.clearTimeout(this.stripTimer);
+    this.stripTimer = window.setTimeout(() => this.stage.setScene(true, this.stripHeight()), 140);
   }
 
   private setStripCollapsed(c: boolean): void {

@@ -1170,6 +1170,7 @@ export class BookStage {
     this.scene = { on, strip };
     this.el.toggleClass("fv-scene-stage", on);
     this.el.style.setProperty("--fv-strip", `${strip}px`);
+    this.el.style.setProperty("--fv-ts-k", String(Math.max(0.5, strip / 272)));
     this.measureSizes();
     if (this.isOpen) void this.rebuild();
   }

@@ -5863,3 +5863,74 @@
   background: linear-gradient(120deg, rgba(255, 255, 255, 0.18), transparent 35%, rgba(0, 0, 0, 0.22));
   pointer-events: none;
 }
+
+/* ===================================================================== */
+/* The shelf scales with its strip (about a quarter of the window)        */
+/* ===================================================================== */
+
+.fv-root .fv-sc {
+  width: calc((var(--fv-strip, 272px) - 68px) * 0.728);
+  height: calc(var(--fv-strip, 272px) - 68px);
+}
+
+.fv-sc-title {
+  font-size: calc(22px * var(--fv-ts-k, 1));
+}
+
+.fv-sc-title[data-len="1"] {
+  font-size: calc(18px * var(--fv-ts-k, 1));
+}
+
+.fv-sc-title[data-len="2"] {
+  font-size: calc(14px * var(--fv-ts-k, 1));
+}
+
+.fv-sc-count {
+  font-size: calc(12.5px * var(--fv-ts-k, 1));
+}
+
+.fv-sc-prog {
+  margin-top: calc(7px * var(--fv-ts-k, 1));
+  font-size: calc(10.5px * var(--fv-ts-k, 1));
+}
+
+.fv-sc-label {
+  padding-bottom: calc(13px * var(--fv-ts-k, 1));
+}
+
+.fv-sc-ribbon {
+  width: calc(13px * var(--fv-ts-k, 1));
+  height: calc(26px * var(--fv-ts-k, 1));
+}
+
+.fv-ts-row {
+  gap: calc(24px * var(--fv-ts-k, 1));
+}
+
+.fv-prop-plant {
+  width: calc(150px * var(--fv-ts-k, 1));
+  height: calc(252px * var(--fv-ts-k, 1));
+}
+
+.fv-prop-globe {
+  width: calc(90px * var(--fv-ts-k, 1));
+  height: calc(120px * var(--fv-ts-k, 1));
+}
+
+.fv-prop-astro {
+  width: calc(58px * var(--fv-ts-k, 1));
+  height: calc(100px * var(--fv-ts-k, 1));
+}
+
+.fv-ladder {
+  width: calc(92px * var(--fv-ts-k, 1));
+  height: calc(252px * var(--fv-ts-k, 1));
+}
+
+.fv-root .fv-sc-new {
+  width: calc(96px * var(--fv-ts-k, 1));
+}
+
+.fv-root .fv-ts-full {
+  padding: calc(9px * var(--fv-ts-k, 1)) 14px;
+}
