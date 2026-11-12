@@ -6037,3 +6037,293 @@
   max-width: 100%;
 }
 
+
+/* handwritten matrices and case lists */
+.fv-matrix {
+  display: inline-grid;
+  grid-template-columns: repeat(var(--cols, 1), auto);
+  gap: 0.1em 0.9em;
+  align-items: baseline;
+  justify-items: center;
+  margin: 0 0.35em;
+  padding: 0.12em 0.55em;
+  vertical-align: middle;
+  line-height: 1.25;
+  position: relative;
+}
+
+.fv-matrix .fv-cell {
+  white-space: nowrap;
+}
+
+.fv-matrix[data-br="paren"] {
+  border-left: 1.5px solid currentColor;
+  border-right: 1.5px solid currentColor;
+  border-radius: 0.7em / 50%;
+}
+
+.fv-matrix[data-br="square"] {
+  border-left: 1.5px solid currentColor;
+  border-right: 1.5px solid currentColor;
+  box-shadow: inset 4px 0 0 -2.5px currentColor, inset -4px 0 0 -2.5px currentColor;
+}
+
+.fv-matrix[data-br="vert"] {
+  border-left: 1.5px solid currentColor;
+  border-right: 1.5px solid currentColor;
+}
+
+.fv-matrix[data-br="dvert"] {
+  border-left: 4px double currentColor;
+  border-right: 4px double currentColor;
+}
+
+.fv-matrix[data-br="brace"] {
+  border-left: 1.5px solid currentColor;
+  border-right: 1.5px solid currentColor;
+  border-radius: 0.5em / 40%;
+}
+
+.fv-matrix[data-br="cases"] {
+  border-left: 1.5px solid currentColor;
+  border-radius: 0.6em 0 0 0.6em / 50%;
+  justify-items: start;
+  padding-right: 0.2em;
+}
+
+/* ===================================================================== */
+/* The tool rack: writing tools and highlighters, together, on one side   */
+/* ===================================================================== */
+
+.fv-rack {
+  position: absolute;
+  top: 74px;
+  z-index: 16;
+  display: flex;
+  gap: 10px;
+  padding: 6px 10px 8px;
+  border-radius: 14px;
+  pointer-events: auto;
+  --rot: 90deg;
+  --pull: -16px;
+}
+
+.fv-rack[data-side="left"] {
+  left: 16px;
+  --rot: -90deg;
+  --pull: 16px;
+}
+
+.fv-rack[data-side="right"] {
+  right: 16px;
+}
+
+.fv-scene-stage .fv-rack {
+  top: calc(var(--fv-strip, 272px) + 2px);
+}
+
+.fv-scene-stage .fv-rack[data-side="right"] {
+  top: calc(var(--fv-strip, 272px) + 78px);
+}
+
+.fv-rack-group {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fv-rack-label {
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.6;
+  text-align: center;
+  margin-bottom: 2px;
+}
+
+.fv-rack .fv-tray,
+.fv-rack .fv-wtray {
+  position: static;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  pointer-events: auto;
+}
+
+.fv-root .fv-rack .fv-rack-group .fv-pen {
+  position: relative;
+  width: 88px;
+  height: 17px;
+  flex: none;
+  transform: translateX(0);
+  transform-origin: 50% 50%;
+  transition: transform 0.25s cubic-bezier(0.3, 0.9, 0.3, 1.2);
+  filter: none;
+  bottom: auto;
+  left: auto;
+}
+
+.fv-root .fv-rack .fv-rack-group .fv-pen:hover {
+  transform: translateX(calc(var(--pull) * 0.5));
+}
+
+.fv-root .fv-rack .fv-rack-group .fv-pen.is-active,
+.fv-root .fv-rack .fv-rack-group .fv-pen.is-active:hover {
+  transform: translateX(var(--pull));
+}
+
+.fv-root .fv-rack .fv-rack-group .fv-pen.fv-pen-svg svg {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 19px;
+  height: 88px;
+  transform: translate(-50%, -50%) rotate(var(--rot));
+  filter: drop-shadow(0 3px 2px rgba(0, 0, 0, 0.45));
+}
+
+.fv-root .fv-rack .fv-rack-group .fv-pen.fv-pen-svg {
+  filter: none;
+}
+
+.fv-root .fv-rack .fv-rack-group .fv-w-marker {
+  height: 22px;
+}
+
+.fv-root .fv-rack .fv-rack-group .fv-w-marker svg {
+  width: 24px;
+}
+
+.fv-root .fv-rack .fv-rack-group .fv-w-eraser {
+  height: 24px;
+}
+
+.fv-root .fv-rack .fv-rack-group .fv-w-eraser svg {
+  width: 26px;
+  height: 70px;
+}
+
+.fv-root .fv-rack .fv-rack-group .fv-w-text {
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fv-root .fv-rack .fv-rack-group .fv-w-text .fv-pen-body {
+  position: absolute;
+  inset: 0;
+  width: auto;
+  height: auto;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #fbf5e6, #e8dcc0);
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+  transform: none;
+}
+
+.fv-root .fv-rack .fv-rack-group .fv-w-text .fv-wpen-glyph {
+  position: relative;
+  color: #3a3226;
+  font-family: "FV Caveat", Georgia, cursive;
+  font-size: 17px;
+  transform: none;
+}
+
+/* colour choices for the selected pen sit under the writing group */
+.fv-rack .fv-wcolors {
+  position: absolute;
+  top: 18px;
+  bottom: auto;
+  left: calc(100% + 18px);
+  right: auto;
+  flex-direction: column;
+  z-index: 4;
+}
+
+.fv-rack[data-side="right"] .fv-wcolors {
+  left: auto;
+  right: calc(100% + 18px);
+}
+
+.fv-rack .fv-wtray.is-disabled {
+  opacity: 0.45;
+  filter: grayscale(0.6);
+}
+
+/* the legend note: classic puts it on the side without tools; the scene keeps it on the right, below the rack if need be */
+.fv-classic .fv-stage[data-tools="right"] .fv-legend {
+  left: 26px;
+  right: auto;
+}
+
+.fv-classic .fv-stage[data-tools="left"] .fv-legend {
+  left: auto;
+  right: 26px;
+}
+
+.fv-scene-stage[data-tools="right"] .fv-legend {
+  top: calc(var(--fv-strip, 272px) + 282px);
+}
+
+.fv-scene-stage.is-laptop .fv-rack {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.fv-root.is-narrow .fv-rack-label {
+  display: none;
+}
+
+.fv-info-range {
+  width: 100px;
+  accent-color: var(--fv-accent, #7c5cbf);
+}
+
+.fv-more-tilt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: default;
+}
+
+.fv-more-tilt .fv-info-range {
+  width: 90px;
+  margin-left: auto;
+}
+
+.fv-rack .fv-rack-write {
+  position: static;
+}
+
+.fv-rack .fv-wcolors {
+  top: 30px;
+  left: calc(100% + 8px);
+}
+
+.fv-rack[data-side="right"] .fv-wcolors {
+  left: auto;
+  right: calc(100% + 8px);
+}
+
+/* classic layout: the rack sits in the bottom corner, the "last read" badge moves to the other one */
+.fv-classic .fv-rack {
+  top: auto;
+  bottom: 12px;
+}
+
+.fv-classic .fv-stage[data-tools="right"] .fv-lastedit {
+  right: auto;
+  left: 18px;
+}
+
+.fv-classic .fv-stage[data-tools="left"] .fv-lastedit {
+  left: auto;
+  right: 18px;
+}
+
+.fv-classic .fv-rack .fv-wcolors {
+  top: auto;
+  bottom: 0;
+}

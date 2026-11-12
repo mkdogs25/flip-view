@@ -80,11 +80,14 @@ export class BookStage {
   private activePen: number | null = null;
   private baselineKey = "";
   private tally = new PageTally();
+  /** One-page notes sharing a spread: host note index -> the note shown on its right-hand page. */
+  private guests = new Map<number, { idx: number; layout: NoteLayout }>();
   private shownKey = "";
   private crawlToken = 0;
   private indexTimer = 0;
   private writeTool: WriteTool | null = null;
   private wtray: HTMLElement;
+  private rack: HTMLElement;
   private ribbonEl: HTMLElement;
   private btnBookmark: HTMLButtonElement;
   private hlPop: HTMLElement;
@@ -241,15 +244,16 @@ export class BookStage {
     });
     this.hlPop = this.el.createDiv({ cls: "fv-hlpop fv-glass" });
     this.tabsEl = this.book.createDiv({ cls: "fv-tabs" });
-    const cupW = this.el.createDiv({ cls: "fv-cup fv-cup-write" });
-    this.wtray = cupW.createDiv({ cls: "fv-wtray" });
-    cupW.createDiv({ cls: "fv-cup-body" });
+    this.rack = this.el.createDiv({ cls: "fv-rack fv-glass" });
+    const rackW = this.rack.createDiv({ cls: "fv-rack-group fv-rack-write" });
+    rackW.createDiv({ cls: "fv-rack-label", text: "Write" });
+    this.wtray = rackW.createDiv({ cls: "fv-wtray" });
     this.book.addEventListener("pointerdown", (e) => this.onInkDown(e));
     this.book.addEventListener("dblclick", (e) => this.onDblClick(e));
     document.addEventListener("pointerdown", this.onDocPointerDown, true);
-    const cupH = this.el.createDiv({ cls: "fv-cup fv-cup-hl" });
-    this.tray = cupH.createDiv({ cls: "fv-tray" });
-    cupH.createDiv({ cls: "fv-cup-body" }).createSpan({ cls: "fv-cup-star", text: "✦" });
+    const rackH = this.rack.createDiv({ cls: "fv-rack-group fv-rack-hl" });
+    rackH.createDiv({ cls: "fv-rack-label", text: "Highlight" });
+    this.tray = rackH.createDiv({ cls: "fv-tray" });
     this.legend = this.el.createDiv({ cls: "fv-legend" });
     this.sfx = new Sfx(() => host.settings);
     document.addEventListener("pointerup", this.onPointerUp);
@@ -438,13 +442,16 @@ export class BookStage {
     if (!this.isOpen) return void this.open();
     if (!this.layout) return;
     if (this.spread + 1 < this.layout.spreads) await this.turnTo(this.noteIdx, this.spread + 1);
-    else if (this.noteIdx + 1 < this.notebook.notes.length) await this.turnTo(this.noteIdx + 1, 0);
+    else {
+      const t = await this.neighbour(true);
+      if (t < this.notebook.notes.length) await this.turnTo(t, 0);
+    }
   }
 
   async prev(): Promise<void> {
     if (!this.notebook || !this.isOpen || !this.layout) return;
     if (this.spread > 0) await this.turnTo(this.noteIdx, this.spread - 1);
-    else if (this.noteIdx > 0) await this.turnTo(this.noteIdx - 1, Number.MAX_SAFE_INTEGER);
+    else if (this.noteIdx > 0) await this.turnTo(await this.neighbour(false), Number.MAX_SAFE_INTEGER);
     else await this.close();
   }
 
@@ -495,6 +502,9 @@ export class BookStage {
     for (const t of ["fine", "none", "rough", "laid", "linen", "speckled"]) this.el.toggleClass(`fv-pt-${t}`, s.pageTexture === t);
     for (const l of ["classic", "realistic", "wide"]) this.el.toggleClass(`fv-pl-${l}`, s.pageLayout === l);
     this.el.toggleClass("fv-margins", s.marginNotes);
+    this.el.setAttr("data-tools", s.toolsSide);
+    this.rack.setAttr("data-side", s.toolsSide);
+    this.el.style.setProperty("--fv-tilt", `${clamp(s.bookTilt, 0, 45)}deg`);
     this.el.toggleClass("fv-ribbon-on", s.ribbon);
     this.el.toggleClass("fv-nofolio", !s.showPageNumbers);
     const body = handFontInfo(s.handFont);
@@ -520,6 +530,7 @@ export class BookStage {
   /** The note's text changed on disk; the next layout request re-renders it. */
   fileChanged(path: string): void {
     this.engine.invalidate(path);
+    this.guests.clear();
   }
 
   destroy(): void {
@@ -675,7 +686,7 @@ export class BookStage {
     return { mode: s.viewMode, w: Math.round(iw), h: Math.round(ih), gap: 48, messiness: s.messiness, tame, lineVar, margin: s.marginNotes, signature: sig };
   }
 
-  private async getLayout(idx: number): Promise<NoteLayout> {
+  private async rawLayout(idx: number): Promise<NoteLayout> {
     const note = this.notebook?.notes[idx];
     if (!note) throw new Error("note index out of range");
     const timer = window.setTimeout(() => this.spinner.addClass("is-visible"), 220);
@@ -688,12 +699,70 @@ export class BookStage {
     }
   }
 
+  private async getLayout(idx: number): Promise<NoteLayout> {
+    const layout = await this.rawLayout(idx);
+    await this.resolveGuest(idx, layout);
+    return layout;
+  }
+
+  /** Position of notes[idx] within its run of consecutive notes (the index page and separators break runs). */
+  private runPos(idx: number): number {
+    const notes = this.notebook?.notes ?? [];
+    let n = 0;
+    for (let i = idx - 1; i >= 0 && isNote(notes[i]); i--) n++;
+    return n;
+  }
+
+  /** Decides whether a one-page note shares its spread with the one-page note after it. */
+  private async resolveGuest(idx: number, layout: NoteLayout): Promise<void> {
+    this.guests.delete(idx);
+    const notes = this.notebook?.notes ?? [];
+    if (!this.host.settings.packShortNotes || layout.pageCount !== 1 || !isNote(notes[idx]) || this.runPos(idx) % 2 !== 0) return;
+    const next = notes[idx + 1];
+    if (!next || !isNote(next)) return;
+    const l2 = await this.rawLayout(idx + 1);
+    if (l2.pageCount === 1) this.guests.set(idx, { idx: idx + 1, layout: l2 });
+  }
+
+  /** Whether notes[idx] sits on the right-hand page of the note before it. */
+  private async isGuest(idx: number): Promise<boolean> {
+    const notes = this.notebook?.notes ?? [];
+    if (idx < 1 || !this.host.settings.packShortNotes || !isNote(notes[idx]) || !isNote(notes[idx - 1]) || this.runPos(idx) % 2 !== 1) return false;
+    return (await this.rawLayout(idx)).pageCount === 1 && (await this.rawLayout(idx - 1)).pageCount === 1;
+  }
+
+  /** The note a page turn from the current one lands in, skipping a note that is already on show. */
+  private async neighbour(forward: boolean, from = this.noteIdx): Promise<number> {
+    const last = (this.notebook?.notes.length ?? 1) - 1;
+    if (forward) {
+      const skip = from === this.noteIdx && this.guests.has(from) ? 2 : (await this.hostedBy(from)) ? 2 : 1;
+      return Math.min(last + 1, from + skip);
+    }
+    let t = from - 1;
+    if (t >= 1 && (await this.isGuest(t))) t--;
+    return t;
+  }
+
+  /** Whether the note at idx is already showing as the guest of the note before it (so its own page is skipped). */
+  private async hostedBy(idx: number): Promise<boolean> {
+    return this.guests.has(idx);
+  }
+
   /** A page element with its folio, running head, margin notes and ink. */
   private pageFor(layout: NoteLayout, noteIdx: number, index: number, side: "left" | "right"): HTMLElement {
     const s = this.host.settings;
     const note = layout.note;
-    const folio = isNote(note) && this.notebook ? this.tally.start(this.notebook.notes, noteIdx).folio + index : undefined;
+    const folio = isNote(note) && this.notebook ? this.tally.start(this.notebook.notes, noteIdx, s.packShortNotes).folio + index : undefined;
     const annots = s.viewMode === "handwritten" ? s.annotations[note.path] : undefined;
+    const guest = this.guests.get(noteIdx);
+    if (guest && layout.pageCount === 1 && index === 1 && side === "right" && this.notebook) {
+      const gn = guest.layout.note;
+      const el = guest.layout.pageEl(0, "right", { folio: folio !== undefined ? folio + 1 : undefined, head: gn.title });
+      el.addClass("fv-guest");
+      el.dataset.notePath = gn.path;
+      el.dataset.noteIdx = String(guest.idx);
+      return el;
+    }
     return layout.pageEl(index, side, { folio, annots, head: isNote(note) ? note.title : undefined });
   }
 
@@ -855,7 +924,7 @@ export class BookStage {
     let tNote = this.noteIdx;
     let tSpread = this.spread + (forward ? 1 : -1);
     if (tSpread >= this.layout.spreads || tSpread < 0) {
-      tNote += forward ? 1 : -1;
+      tNote = await this.neighbour(forward);
       tSpread = forward ? 0 : Number.MAX_SAFE_INTEGER;
     }
     if (tNote < 0 || tNote >= this.notebook.notes.length) return;
@@ -1005,7 +1074,7 @@ export class BookStage {
   private onPageClick(e: MouseEvent): void {
     const target = e.target as HTMLElement;
     const hl = target.closest<HTMLElement>(".fv-hl");
-    if (hl && this.activePen !== null && window.getSelection()?.isCollapsed !== false) {
+    if (hl && this.activePen !== null && !hl.closest(".fv-guest") && window.getSelection()?.isCollapsed !== false) {
       e.preventDefault();
       if (hl.dataset.hl) this.removeHighlight(hl.dataset.hl);
       return;
@@ -1025,7 +1094,8 @@ export class BookStage {
     e.stopPropagation();
     const href = a.getAttribute("data-href") ?? a.getAttribute("href");
     if (!href) return;
-    const source = this.currentNote()?.path ?? "";
+    const guestPage = target.closest<HTMLElement>(".fv-guest");
+    const source = guestPage?.dataset.notePath ?? this.currentNote()?.path ?? "";
     const newTab = e.ctrlKey || e.metaKey;
     const isUrl = /^[a-z][a-z0-9+.-]*:/i.test(href);
     if (isUrl) {
@@ -1034,7 +1104,7 @@ export class BookStage {
     } else if (newTab) {
       this.host.openLink(href, source, true);
     } else if (href.startsWith("#")) {
-      const i = this.noteIdx;
+      const i = guestPage ? Number(guestPage.dataset.noteIdx) : this.noteIdx;
       void this.goTo(i, href.slice(1).split("#").pop());
     } else {
       this.cb.followInternal(href, source);
@@ -1193,7 +1263,8 @@ export class BookStage {
       this.lastEditText.createDiv({ text: formatDate(seen ? seen.last : note.mtime) });
     }
     if (open && note && this.notebook) {
-      this.footTitle.setText(note.title);
+      const g = this.guests.get(this.noteIdx);
+      this.footTitle.setText(g && this.layout?.pageCount === 1 ? `${note.title} \u00b7 ${g.layout.note.title}` : note.title);
       this.footCount.setText(`${this.noteIdx + 1} / ${this.notebook.notes.length}`);
       this.btnNext.disabled = !this.layout || (this.noteIdx >= this.notebook.notes.length - 1 && this.spread >= this.layout.spreads - 1);
       this.btnPrev.disabled = false;
@@ -1269,13 +1340,14 @@ export class BookStage {
     if (!nb) return null;
     const s = this.host.settings;
     const marks = s.bookmarks[nb.id] ?? [];
-    const folios = nb.notes.map((n, i) => (isNote(n) ? this.tally.start(nb.notes, i) : null));
+    const folios = nb.notes.map((n, i) => (isNote(n) ? this.tally.start(nb.notes, i, s.packShortNotes) : null));
     const sig = [
       this.tally.version,
       nb.notes.map((n) => `${n.path}:${n.mtime}`).join(","),
       nb.notes.map((n) => noteStatus(s, n.path)).join(""),
       marks.map((m) => m.path).join(","),
       s.indexTitle,
+      s.packShortNotes,
       s.indexPageNumbers,
       s.indexLastEdited,
       s.indexCreated,
@@ -1299,9 +1371,9 @@ export class BookStage {
   /** Page numbers printed on the visible pages follow the tally as it firms up. */
   private refreshFolios(): void {
     if (!this.isOpen || !this.notebook || !isNote(this.currentNote())) return;
-    const first = this.tally.start(this.notebook.notes, this.noteIdx).folio;
+    const first = this.tally.start(this.notebook.notes, this.noteIdx, this.host.settings.packShortNotes).folio;
     this.book.querySelectorAll<HTMLElement>(".fv-pagebase .fv-page-no").forEach((el) => {
-      el.setText(String(first + Number(el.dataset.index ?? 0)));
+      el.setText(String(first + (el.closest(".fv-guest") ? 1 : Number(el.dataset.index ?? 0))));
     });
   }
 
@@ -1647,7 +1719,7 @@ export class BookStage {
     if (!tool || e.button !== 0 || !this.isOpen || this.busy || this.host.settings.viewMode !== "handwritten") return;
     const pageEl = (e.target as HTMLElement).closest<HTMLElement>(".fv-pagebase .fv-page");
     const note = this.currentNote();
-    if (!pageEl || !note || isIndex(note)) return;
+    if (!pageEl || !note || isIndex(note) || pageEl.classList.contains("fv-guest")) return;
     if ((e.target as HTMLElement).closest(".fv-ink-edit")) return;
     e.preventDefault();
     e.stopPropagation();
@@ -1809,7 +1881,7 @@ export class BookStage {
 
   private onDblClick(e: MouseEvent): void {
     const mark = (e.target as HTMLElement).closest<HTMLElement>(".fv-hl");
-    if (!mark || !mark.dataset.hl || !this.isOpen) return;
+    if (!mark || !mark.dataset.hl || !this.isOpen || mark.closest(".fv-guest")) return;
     e.preventDefault();
     window.getSelection()?.removeAllRanges();
     this.showHlPop(mark, e);
@@ -1911,7 +1983,7 @@ export class BookStage {
     const anc = range.commonAncestorContainer;
     const host = anc instanceof Element ? anc : anc.parentElement;
     const flow = host?.closest<HTMLElement>(".fv-flow");
-    if (!flow || !this.book.contains(flow) || flow.closest(".fv-leaf")) return;
+    if (!flow || !this.book.contains(flow) || flow.closest(".fv-leaf, .fv-guest")) return;
     const text = flow.textContent ?? "";
     let start = textOffsetOf(flow, range.startContainer, range.startOffset);
     let end = textOffsetOf(flow, range.endContainer, range.endOffset);
@@ -1971,6 +2043,21 @@ export class BookStage {
     item("panel-left", "Notebook list", "list", () => this.cb.toggleSidebar());
     item("panel-right", "Outline", "outline", () => this.cb.toggleOutline());
     item("layout-grid", "Shelf mode", "shelf", () => this.cb.shelfRequested());
+    item("arrow-left-right", this.host.settings.toolsSide === "right" ? "Tools on the left" : "Tools on the right", "toolsside", () => {
+      this.host.settings.toolsSide = this.host.settings.toolsSide === "right" ? "left" : "right";
+      this.host.saveSettings();
+      this.applySettings(false);
+    });
+    const tiltRow = m.createDiv({ cls: "fv-more-item fv-more-tilt", attr: { "data-id": "tilt" } });
+    setIcon(tiltRow.createSpan({ cls: "fv-more-icon" }), "rotate-3d");
+    tiltRow.createSpan({ text: "Tilt" });
+    const range = tiltRow.createEl("input", { cls: "fv-info-range", attr: { type: "range", min: "0", max: "45", step: "1", "aria-label": "Notebook tilt" } });
+    range.value = String(this.host.settings.bookTilt);
+    range.addEventListener("input", () => {
+      this.host.settings.bookTilt = Number(range.value);
+      this.el.style.setProperty("--fv-tilt", `${range.value}deg`);
+    });
+    range.addEventListener("change", () => this.host.saveSettings());
     if (this.scene.on) item("library", this.host.settings.shelfHidden ? "Show the shelf" : "Hide the shelf", "toggleshelf", () => this.cb.toggleShelfVisible());
     if (this.notebook && !this.isOpen) {
       item("palette", "Cover options", "cover", () => this.notebook && this.cb.customiseCover(this.notebook));

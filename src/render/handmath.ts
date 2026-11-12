@@ -23,7 +23,7 @@ export function extractMath(md: string): { md: string; items: MathItem[] } {
     .map((seg, i) => {
       if (i % 2 === 1) return seg;
       return seg
-        .replace(/\$\$([\s\S]+?)\$\$/g, (_, tex: string) => push(tex, true))
+        .replace(/\$\$([\s\S]+?)\$\$/g, (_, tex: string) => push(tex.replace(/^[ \t]*(?:>[ \t]?)+/gm, ""), true))
         .replace(/(?<![\\$\w])\$(?!\s)([^$\n]+?)(?<!\s)\$(?![\d$])/g, (_, tex: string) => push(tex, false));
     })
     .join("");
@@ -66,7 +66,9 @@ type N =
   | { t: "sqrt"; a: N[] }
   | { t: "sup" | "sub"; a: N[] }
   | { t: "group"; a: N[] }
-  | { t: "br" };
+  | { t: "br" }
+  | { t: "amp" }
+  | { t: "matrix"; rows: N[][][]; br: string };
 
 const SYMBOLS: Record<string, string> = {
   alpha: "α", beta: "β", gamma: "γ", delta: "δ", epsilon: "ε", varepsilon: "ε", zeta: "ζ", eta: "η", theta: "θ", vartheta: "ϑ",
@@ -81,11 +83,30 @@ const SYMBOLS: Record<string, string> = {
   circ: "∘", star: "⋆", dagger: "†", prime: "′", lbrace: "{", rbrace: "}", lvert: "|", rvert: "|", Vert: "‖", ll: "≪", gg: "≫",
   therefore: "∴", because: "∵", sin: "sin", cos: "cos", tan: "tan", log: "log", ln: "ln", exp: "exp", lim: "lim", max: "max",
   min: "min", det: "det", dim: "dim", ker: "ker", arg: "arg", sup: "sup", inf: "inf", Re: "ℜ", Im: "ℑ", aleph: "ℵ",
+  perp: "⊥", parallel: "∥", otimes: "⊗", oplus: "⊕", ominus: "⊖", odot: "⊙", wedge: "∧", vee: "∨", setminus: "∖", mid: "∣", nmid: "∤",
+  lfloor: "⌊", rfloor: "⌋", lceil: "⌈", rceil: "⌉", ast: "∗", bullet: "•", nexists: "∄", varpi: "ϖ", varrho: "ϱ", varsigma: "ς",
+  Upsilon: "Υ", hslash: "ħ", wp: "℘", top: "⊤", bot: "⊥", checkmark: "✓", models: "⊨", vdash: "⊢", dashv: "⊣", lnot: "¬",
+  longrightarrow: "⟶", longleftarrow: "⟵", Longrightarrow: "⟹", Longleftarrow: "⟸", longleftrightarrow: "⟷", Longleftrightarrow: "⟺",
+  hookrightarrow: "↪", uparrow: "↑", downarrow: "↓", updownarrow: "↕", nearrow: "↗", searrow: "↘", leadsto: "↝", cong: "≅", doteq: "≐",
+  triangleq: "≜", prec: "≺", succ: "≻", preceq: "⪯", succeq: "⪰", sqsubset: "⊏", sqcup: "⊔", sqcap: "⊓", uplus: "⊎", bigcup: "⋃", bigcap: "⋂",
+  bigoplus: "⨁", bigotimes: "⨂", coprod: "∐", iint: "∬", iiint: "∭", surd: "√", square: "□", triangle: "△", diamond: "⋄", imath: "ı", jmath: "ȷ",
+  coloneqq: "≔", colon: ":", lbrack: "[", rbrack: "]", backslash: "\\", vert: "|", Arrowvert: "‖", lVert: "‖", rVert: "‖", dag: "†", ddag: "‡",
+  S: "§", P: "¶", copyright: "©", pounds: "£", euro: "€", ohm: "Ω", micro: "µ", angstrom: "Å", celsius: "°C",
+  sinh: "sinh", cosh: "cosh", tanh: "tanh", sec: "sec", csc: "csc", cot: "cot", arcsin: "arcsin", arccos: "arccos", arctan: "arctan",
+  gcd: "gcd", deg: "deg", hom: "hom", Pr: "Pr", liminf: "liminf", limsup: "limsup",
 };
 const BLACKBOARD: Record<string, string> = { R: "ℝ", N: "ℕ", Z: "ℤ", Q: "ℚ", C: "ℂ", P: "ℙ", H: "ℍ" };
 const ACCENTS: Record<string, string> = { vec: "⃗", hat: "̂", bar: "̄", overline: "̄", tilde: "̃", dot: "̇", ddot: "̈" };
 const SPACES = new Set([",", ";", ":", " ", "!", "quad", "qquad"]);
-const WRAP: Record<string, [string, string]> = { pmatrix: ["(", ")"], bmatrix: ["[", "]"], vmatrix: ["|", "|"], Vmatrix: ["‖", "‖"], cases: ["{", ""] };
+const WRAP: Record<string, [string, string]> = { pmatrix: ["(", ")"], bmatrix: ["[", "]"], Bmatrix: ["{", "}"], vmatrix: ["|", "|"], Vmatrix: ["‖", "‖"], cases: ["{", ""], matrix: ["", ""], smallmatrix: ["", ""] };
+/** Commands that take one argument and just show it as ordinary text (spaces kept). */
+const TEXTLIKE = new Set(["text", "textbf", "textit", "textrm", "textsf", "texttt", "mathrm", "mathbf", "mathit", "mathsf", "mathtt", "operatorname", "mbox", "hbox", "mathcal", "mathscr", "mathfrak", "boldsymbol", "bm", "emph"]);
+/** Commands that take one argument and just show it. */
+const PASS1 = new Set(["underline", "boxed", "displaystyle", "textstyle", "scriptstyle", "overbrace", "underbrace", "cancel", "bcancel", "xcancel", "not", "phantom", "mathop", "mathbin", "mathrel", "mathord", "mathpunct"]);
+/** Commands that take one argument and drop it. */
+const DROP1 = new Set(["tag", "label", "nonumber", "notag", "hphantom", "vphantom", "color", "pagecolor"]);
+/** Sizing and spacing commands with no visible result. */
+const NOOP = new Set(["displaystyle", "textstyle", "scriptstyle", "limits", "nolimits", "big", "Big", "bigg", "Bigg", "bigl", "bigr", "Bigl", "Bigr", "biggl", "biggr", "Biggl", "Biggr", "middle", "hline", "toprule", "midrule", "bottomrule", "centering", "protect", "strut"]);
 const THIN = " ";
 
 class Parser {
@@ -132,6 +153,24 @@ class Parser {
     return [{ t: "text", v: ch }];
   }
 
+  /** The next argument as raw text (spaces kept), for \\text and friends. */
+  private rawArg(): string {
+    this.skipWs();
+    if (this.s[this.i] !== "{") return this.s[this.i++] ?? "";
+    let depth = 0;
+    let out = "";
+    while (this.i < this.s.length) {
+      const c = this.s[this.i++];
+      if (c === "{") {
+        if (depth++ === 0) continue;
+      } else if (c === "}") {
+        if (--depth === 0) break;
+      }
+      out += c;
+    }
+    return out;
+  }
+
   private name(): string {
     const m = /^[A-Za-z]+/.exec(this.s.slice(this.i));
     if (m) {
@@ -151,7 +190,16 @@ class Parser {
     }
     if (c === "&") {
       this.i++;
-      return { t: "text", v: "  " };
+      return { t: "amp" };
+    }
+    if (c === "~") {
+      this.i++;
+      return { t: "text", v: " " };
+    }
+    if (c === "%") {
+      const end = this.s.indexOf("\n", this.i);
+      this.i = end < 0 ? this.s.length : end + 1;
+      return null;
     }
     if (c === "\\") {
       this.i++;
@@ -170,12 +218,49 @@ class Parser {
   }
 
   private command(name: string): N | null {
-    if (name === "\\") return { t: "br" };
+    if (name === "\\") {
+      if (this.s[this.i] === "[") this.i = Math.max(this.i, this.s.indexOf("]", this.i) + 1); // \\[2pt]
+      return { t: "br" };
+    }
+    if (NOOP.has(name)) return null;
+    if (DROP1.has(name)) {
+      this.arg();
+      return null;
+    }
+    if (TEXTLIKE.has(name)) return { t: "text", v: this.rawArg() };
+    if (PASS1.has(name)) return { t: "group", a: this.arg() };
+    if (name === "binom" || name === "dbinom" || name === "tbinom") {
+      const top = this.arg();
+      const bot = this.arg();
+      return { t: "group", a: [{ t: "text", v: "(" }, { t: "frac", a: top, b: bot }, { t: "text", v: ")" }] };
+    }
+    if (name === "overset" || name === "stackrel") {
+      const over = this.arg();
+      return { t: "group", a: [...this.arg(), { t: "sup", a: over }] };
+    }
+    if (name === "underset") {
+      const under = this.arg();
+      return { t: "group", a: [...this.arg(), { t: "sub", a: under }] };
+    }
+    if (name === "xrightarrow" || name === "xleftarrow" || name === "xlongequal") {
+      if (this.s[this.i] === "[") this.i = Math.max(this.i, this.s.indexOf("]", this.i) + 1);
+      const over = this.arg();
+      return { t: "group", a: [{ t: "text", v: name === "xleftarrow" ? "←" : name === "xlongequal" ? "=" : "→" }, { t: "sup", a: over }] };
+    }
+    if (name === "ce" || name === "pu") return { t: "text", v: this.rawArg() };
     if (SPACES.has(name)) return { t: "text", v: name === "quad" || name === "qquad" ? "  " : THIN };
     if (name === "frac" || name === "dfrac" || name === "tfrac") return { t: "frac", a: this.arg(), b: this.arg() };
     if (name === "sqrt") {
-      if (this.s[this.i] === "[") this.i = this.s.indexOf("]", this.i) + 1; // ignore the root index
-      return { t: "sqrt", a: this.arg() };
+      let index: N[] = [];
+      if (this.s[this.i] === "[") {
+        const end = this.s.indexOf("]", this.i);
+        if (end > 0) {
+          index = new Parser(this.s.slice(this.i + 1, end)).seq();
+          this.i = end + 1;
+        }
+      }
+      const root: N = { t: "sqrt", a: this.arg() };
+      return index.length ? { t: "group", a: [{ t: "sup", a: index }, root] } : root;
     }
     if (name === "left" || name === "right") {
       const d = this.s[this.i++] ?? "";
@@ -185,9 +270,6 @@ class Parser {
         return { t: "text", v: SYMBOLS[n] ?? n };
       }
       return { t: "text", v: d };
-    }
-    if (["text", "textbf", "textit", "mathrm", "mathbf", "mathit", "operatorname", "mathcal", "mathsf", "boldsymbol"].includes(name)) {
-      return { t: "group", a: this.arg() };
     }
     if (name === "mathbb") {
       const a = this.arg();
@@ -200,14 +282,25 @@ class Parser {
       return { t: "text", v: txt.length ? txt[0] + ACCENTS[name] + txt.slice(1) : "" };
     }
     if (name === "begin") {
-      const env = this.arg().map((n) => (n.t === "text" ? n.v : "")).join("");
+      const env = this.rawArg();
+      if (env === "array" || env === "tabular") this.rawArg(); // column spec
       const inner = this.seq("end");
       if (this.s.startsWith("\\end", this.i)) {
         this.i += 4;
-        this.arg();
+        this.rawArg();
       }
-      const wrap = WRAP[env] ?? ["", ""];
-      return { t: "group", a: [{ t: "text", v: wrap[0] }, ...inner, { t: "text", v: wrap[1] }] };
+      if (env in WRAP) {
+        const rows: N[][][] = [[[]]];
+        for (const n of inner) {
+          if (n.t === "br") rows.push([[]]);
+          else if (n.t === "amp") rows[rows.length - 1].push([]);
+          else rows[rows.length - 1][rows[rows.length - 1].length - 1].push(n);
+        }
+        if (rows.length > 1 && rows[rows.length - 1].every((c) => c.length === 0)) rows.pop(); // trailing \\
+        const br = { pmatrix: "paren", bmatrix: "square", Bmatrix: "brace", vmatrix: "vert", Vmatrix: "dvert", cases: "cases" }[env] ?? "none";
+        return { t: "matrix", rows, br };
+      }
+      return { t: "group", a: inner };
     }
     if (name in SYMBOLS) {
       const v = SYMBOLS[name];
@@ -232,6 +325,26 @@ function build(nodes: N[], into: HTMLElement): void {
       case "br":
         into.append(document.createElement("br"));
         break;
+      case "amp":
+        into.append("  ");
+        break;
+      case "matrix": {
+        const m = document.createElement("span");
+        m.className = "fv-matrix";
+        m.dataset.br = n.br;
+        const cols = Math.max(...n.rows.map((r) => r.length));
+        m.style.setProperty("--cols", String(cols));
+        for (const row of n.rows) {
+          for (let c = 0; c < cols; c++) {
+            const cell = document.createElement("span");
+            cell.className = "fv-cell";
+            if (row[c]) build(row[c], cell);
+            m.append(cell);
+          }
+        }
+        into.append(m);
+        break;
+      }
       case "sup":
       case "sub": {
         const el = document.createElement(n.t);

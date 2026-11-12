@@ -189,6 +189,12 @@ export interface FlipViewSettings {
   stripCollapsed: boolean;
   /** Hide the shelf of covers completely. */
   shelfHidden: boolean;
+  /** Which side of the desk the pens, highlighters and tools sit on. */
+  toolsSide: "left" | "right";
+  /** Two one-page notes in a row share a spread instead of each leaving a blank facing page. */
+  packShortNotes: boolean;
+  /** How far the notebook leans back on the desk, in degrees (0 = flat on, 17 = default). */
+  bookTilt: number;
   infoCollapsed: boolean;
   /** Open a notebook straight away when you pick it from the shelf. */
   openOnPick: boolean;
@@ -302,6 +308,9 @@ export const DEFAULT_SETTINGS: FlipViewSettings = {
   layoutStyle: "scene",
   stripCollapsed: false,
   shelfHidden: false,
+  toolsSide: "right",
+  packShortNotes: true,
+  bookTilt: 17,
   infoCollapsed: false,
   openOnPick: true,
   showPageNumbers: true,

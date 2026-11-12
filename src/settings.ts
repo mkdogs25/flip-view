@@ -104,6 +104,24 @@ export class FlipViewSettingTab extends PluginSettingTab {
       .setDesc("Turn off to hide the shelf completely (scene layout). You can still pick notebooks from the menu, the search, or Shelf Mode.")
       .addToggle((t) => t.setValue(!s.shelfHidden).onChange((v) => ((s.shelfHidden = !v), save())));
     new Setting(containerEl)
+      .setName("Side for pens and tools")
+      .setDesc("Where the writing tools and highlighters sit on the desk. The legend note moves to the other side.")
+      .addDropdown((d) =>
+        d
+          .addOption("right", "Right")
+          .addOption("left", "Left")
+          .setValue(s.toolsSide)
+          .onChange((v) => ((s.toolsSide = v as "left" | "right"), save())),
+      );
+    new Setting(containerEl)
+      .setName("Put short notes together")
+      .setDesc("Two one-page notes in a row share a spread, instead of each leaving a blank page beside it. The second note's page is read-only for ink and highlights; open the note on its own to mark it up.")
+      .addToggle((t) => t.setValue(s.packShortNotes).onChange((v) => ((s.packShortNotes = v), save())));
+    new Setting(containerEl)
+      .setName("Notebook tilt")
+      .setDesc("How far the notebook leans back on the desk. 0 lies it flat towards you; higher looks more like it is seen from an angle.")
+      .addSlider((sl) => sl.setLimits(0, 45, 1).setValue(s.bookTilt).setDynamicTooltip().onChange((v) => ((s.bookTilt = v), save())));
+    new Setting(containerEl)
       .setName("Open the notebook when picked from the shelf")
       .addToggle((t) => t.setValue(s.openOnPick).onChange((v) => ((s.openOnPick = v), save())));
     new Setting(containerEl)

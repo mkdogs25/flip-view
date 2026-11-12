@@ -1,4 +1,4 @@
-import { Component, MarkdownRenderer, Notice, TFile, normalizePath } from "obsidian";
+import { Component, MarkdownRenderer, Notice, TFile, finishRenderMath, normalizePath } from "obsidian";
 import { buildNotebooks } from "./grouping";
 import { CoverModal, HelpModal, NewNotebookModal, PromptModal } from "./modals";
 import { MathItem, extractMath, restoreMath } from "./render/handmath";
@@ -39,6 +39,7 @@ export class ObsidianHost implements NotebookHost {
     try {
       await MarkdownRenderer.render(app, md, el, note.path, child);
       if (opts.hand) restoreMath(el, math);
+      else await finishRenderMath().catch(() => undefined); // flushes the MathJax stylesheet, or equations stay unstyled
     } catch (err) {
       console.error("[flip-view] render failed", err);
       el.createEl("p", { text: "This note could not be rendered." });

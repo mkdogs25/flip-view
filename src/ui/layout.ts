@@ -162,6 +162,29 @@ async function waitForImages(root: HTMLElement, timeout = 2500): Promise<void> {
   ]);
 }
 
+/** The number of columns that actually hold text or media (0 if nothing could be measured). */
+function lastContentPage(flow: HTMLElement, left: number, step: number): number {
+  let last = -1;
+  const note = (r: DOMRect): void => {
+    if (r.width < 1 || r.height < 1) return;
+    last = Math.max(last, Math.floor((r.left - left + 2) / step));
+  };
+  const walker = document.createTreeWalker(flow, NodeFilter.SHOW_TEXT);
+  const range = document.createRange();
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (!(n.nodeValue ?? "").trim()) continue;
+    const el = n.parentElement;
+    if (el && (el.closest(".fv-margin-anchor") || getComputedStyle(el).visibility === "hidden")) continue;
+    range.selectNodeContents(n);
+    for (const r of Array.from(range.getClientRects())) note(r);
+  }
+  flow.querySelectorAll("img, svg, canvas, video, iframe, hr, table, pre, .fv-hmath-block, mjx-container, .math").forEach((el) => {
+    if (el.closest("svg") && el.tagName !== "svg") return;
+    for (const r of Array.from(el.getClientRects())) note(r);
+  });
+  return last + 1;
+}
+
 /** Renders notes into a hidden measuring box, splits them into page-sized CSS columns and caches the result. */
 export class LayoutEngine {
   private cache = new Map<string, Entry>();
@@ -254,8 +277,11 @@ export class LayoutEngine {
     await sleep(30); // let late post-processors (embeds, math) settle
 
     const step = cfg.w + cfg.gap;
-    const pages = Math.max(1, Math.round((flow.scrollWidth + cfg.gap) / step));
     const left = flow.getBoundingClientRect().left;
+    const measured = Math.max(1, Math.round((flow.scrollWidth + cfg.gap) / step));
+    // trust the last bit of real content over scrollWidth, which also counts margins and hidden overflow
+    const used = lastContentPage(flow, left, step);
+    const pages = used > 0 ? Math.min(measured, used) : measured;
     const pageOf = (el: Element): number => {
       const r = el.getClientRects()[0];
       return r ? Math.max(0, Math.floor((r.left - left + 2) / step)) : 0;
