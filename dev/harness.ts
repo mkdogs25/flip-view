@@ -175,6 +175,10 @@ const host: NotebookHost = {
     return key ? { path: key + ".md", heading } : null;
   },
   openNote: () => undefined,
+  readNoteText: async (path) => SOURCES[path.replace(/\.md$/, "")] ?? "",
+  writeNoteText: async (path, text) => {
+    SOURCES[path.replace(/\.md$/, "")] = text;
+  },
   openLink: () => undefined,
   openExternal: () => undefined,
   createNotebook: () => undefined,

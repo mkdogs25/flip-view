@@ -12,6 +12,7 @@ import { resolveLook } from "./coverStyle";
 import { ensureInkLayer, makeStrokeEl, renderInk, strokePath } from "./ink";
 import { Heading, IndexData, LayoutConfig, LayoutEngine, NoteLayout } from "./layout";
 import { PageTally } from "./tally";
+import { penSvg } from "./pens";
 import { propEl } from "./props";
 
 export interface StageCallbacks {
@@ -30,6 +31,7 @@ export interface StageCallbacks {
   shelfRequested(): void;
   searchRequested(): void;
   openSettings(): void;
+  toggleShelfVisible(): void;
 }
 
 function penCursor(color: string): string {
@@ -65,6 +67,8 @@ export class BookStage {
   private btnShuffle: HTMLButtonElement;
   private btnCover: HTMLButtonElement;
   private btnOpenNote: HTMLButtonElement;
+  private btnEdit: HTMLButtonElement;
+  private editor: HTMLElement | null = null;
   private tray: HTMLElement;
   private moreMenu: HTMLElement;
   private tabsEl: HTMLElement;
@@ -204,7 +208,6 @@ export class BookStage {
     this.lastEditText = this.lastEdit.createDiv({ cls: "fv-lastedit-text" });
     this.hint = this.el.createDiv({ cls: "fv-hint" });
     const things = this.el.createDiv({ cls: "fv-desk-things" });
-    things.appendChild(propEl("laptop", "fv-thing fv-thing-laptop"));
     things.appendChild(propEl("pencil", "fv-thing fv-thing-pencil"));
     things.appendChild(propEl("clips", "fv-thing fv-thing-clips"));
 
@@ -220,6 +223,8 @@ export class BookStage {
     });
     this.btnNext = iconButton(this.footerOpen, "chevron-right", "Next page");
     this.btnNext.addEventListener("click", () => void this.next());
+    this.btnEdit = iconButton(this.footerOpen, "pencil-line", "Edit this note\u2019s text");
+    this.btnEdit.addEventListener("click", () => void this.toggleEditor());
     this.btnOpenNote = iconButton(this.footerOpen, "file-text", "Open this note");
     this.btnOpenNote.addEventListener("click", (e) => {
       const n = this.currentNote();
@@ -266,6 +271,61 @@ export class BookStage {
   }
 
   /* ------------------------------------------------------------ public API */
+
+  /** Opens (or closes) the text editor laid over the pages. Front matter is kept out of the way and put back on save. */
+  private async toggleEditor(): Promise<void> {
+    if (this.editor) {
+      this.closeEditor();
+      return;
+    }
+    const note = this.currentNote();
+    if (!note || !this.isOpen || isIndex(note) || isSeparator(note)) return;
+    let text: string;
+    try {
+      text = await this.host.readNoteText(note.path);
+    } catch {
+      return;
+    }
+    const m = /^---\r?\n[\s\S]*?\r?\n(?:---|\.\.\.)[ \t]*(?:\r?\n|$)/.exec(text);
+    const front = m ? m[0] : "";
+    const body = text.slice(front.length);
+    const ed = this.book.createDiv({ cls: "fv-editor" });
+    this.editor = ed;
+    ed.addEventListener("pointerdown", (e) => e.stopPropagation());
+    ed.addEventListener("click", (e) => e.stopPropagation());
+    const bar = ed.createDiv({ cls: "fv-editor-bar" });
+    bar.createSpan({ cls: "fv-editor-title", text: `Editing \u201c${note.title}\u201d` });
+    const save = bar.createEl("button", { cls: "fv-editor-btn mod-cta", text: "Save", attr: { type: "button" } });
+    const cancel = bar.createEl("button", { cls: "fv-editor-btn", text: "Cancel", attr: { type: "button" } });
+    const area = ed.createEl("textarea", { cls: "fv-editor-area", attr: { spellcheck: "true" } });
+    area.value = body;
+    const doSave = async (): Promise<void> => {
+      try {
+        await this.host.writeNoteText(note.path, front + area.value);
+      } catch (err) {
+        console.error("[flip-view] save failed", err);
+        return;
+      }
+      this.closeEditor();
+      this.engine.invalidate(note.path);
+      void this.rebuild();
+    };
+    save.addEventListener("click", () => void doSave());
+    cancel.addEventListener("click", () => this.closeEditor());
+    area.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Escape") this.closeEditor();
+      else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) void doSave();
+    });
+    area.focus();
+    this.updateChrome();
+  }
+
+  private closeEditor(): void {
+    this.editor?.remove();
+    this.editor = null;
+    this.updateChrome();
+  }
 
   currentNote() {
     return this.notebook?.notes[this.noteIdx];
@@ -871,9 +931,14 @@ export class BookStage {
 
   /* ------------------------------------------------------------ the laptop */
 
+  private rootEl(): HTMLElement | null {
+    return this.el.closest<HTMLElement>(".fv-root");
+  }
+
   private showLaptop(url: string): void {
     this.laptop.open(url);
     this.el.addClass("is-laptop");
+    this.rootEl()?.addClass("fv-laptop-on");
     this.updateLaptopLayout();
     this.sfx.pen(true);
   }
@@ -881,26 +946,42 @@ export class BookStage {
   private closeLaptop(): void {
     this.laptop.close();
     this.el.removeClass("is-laptop");
+    this.rootEl()?.removeClass("fv-laptop-on");
     this.updateLaptopLayout();
   }
 
-  /** Sizes the laptop and works out how far (and how small) the notebook shifts to make room for it. */
+  /**
+   * Places the browser over the laptop screen in the desk photo (the photo is drawn "cover" across the whole
+   * window) and tucks the notebook into the lower right while the laptop is up.
+   */
   private updateLaptopLayout(): void {
     const r = this.el.getBoundingClientRect();
-    if (r.width === 0) return;
-    const full = r.width < 700;
-    const availH = r.height - 76 - 84 - 10;
-    let lw = full ? r.width * 0.94 : Math.min(r.width * 0.5, 880);
-    lw = Math.max(280, Math.min(lw, availH / 0.88));
-    const space = Math.max(120, r.width - lw * 0.92 - r.width * 0.03 - 12); // the laptop may overlap the book a little
-    const bookW = this.isOpen ? this.metrics.pw * 2 : this.metrics.pw;
-    const scale = clamp((space - 16) / bookW, 0.4, 1);
-    const shift = space / 2 + 6 - r.width / 2;
+    const root = this.rootEl();
+    if (r.width === 0 || !root) return;
+    const rr = root.getBoundingClientRect();
+    const dark = root.classList.contains("fv-dark");
+    const iw = 764;
+    const ih = 508;
+    const k = Math.max(rr.width / iw, rr.height / ih);
+    const ox = (rr.width - iw * k) / 2;
+    const oy = (rr.height - ih * k) / 2;
+    const scr = dark ? { x: 275, y: 99, w: 264, h: 170 } : { x: 279, y: 99, w: 262, h: 168 };
+    this.laptop.setRect({
+      left: rr.left + ox + scr.x * k - r.left,
+      top: rr.top + oy + scr.y * k - r.top,
+      width: scr.w * k,
+      height: scr.h * k,
+    });
+    // the notebook shrinks into the bottom-right corner
+    const bookW = (this.isOpen ? this.metrics.pw * 2 : this.metrics.pw) + 40;
+    const scale = clamp((r.width * 0.27) / bookW, 0.28, 0.62);
+    const midY = this.insets.top + (r.height - this.insets.top - this.insets.bottom) / 2;
+    const cx = r.width - (bookW * scale) / 2 - 26;
+    const cy = r.height - (this.metrics.ph * scale) / 2 - 56;
     const st = this.el.style;
-    st.setProperty("--fv-lw", `${lw}px`);
     st.setProperty("--fv-lscale", String(scale));
-    st.setProperty("--fv-lshift", `${shift}px`);
-    this.el.toggleClass("fv-laptop-full", full);
+    st.setProperty("--fv-lshift", `${cx - r.width / 2}px`);
+    st.setProperty("--fv-lshifty", `${cy - midY}px`);
   }
 
   /* ------------------------------------------------------------ following links */
@@ -1105,6 +1186,8 @@ export class BookStage {
     const sep = isSeparator(note) || isIndex(note);
     this.btnCover.toggleClass("is-hidden", open || !nb);
     this.btnOpenNote.toggleClass("is-hidden", sep);
+    this.btnEdit.toggleClass("is-hidden", sep);
+    this.btnEdit.toggleClass("is-on", !!this.editor);
     this.lastEdit.toggleClass("is-visible", open && !!note && !sep && this.host.settings.showLastEdited);
     if (note) {
       const seen = this.host.settings.trackProgress ? this.host.settings.readState[note.path] : undefined;
@@ -1370,9 +1453,8 @@ export class BookStage {
       pen.style.setProperty("--i", String(i));
       pen.style.setProperty("--n", String(n));
       pen.toggleClass("is-active", i === this.activePen);
-      pen.createDiv({ cls: "fv-pen-cap" });
-      pen.createDiv({ cls: "fv-pen-body" });
-      pen.createDiv({ cls: "fv-pen-tip" });
+      pen.addClass("fv-pen-svg");
+      pen.appendChild(penSvg("highlighter", p.color));
       pen.addEventListener("click", (e) => {
         e.stopPropagation();
         this.selectPen(i);
@@ -1506,10 +1588,13 @@ export class BookStage {
       b.style.setProperty("--i", String(defs.findIndex((d) => d[0] === tool)));
       b.style.setProperty("--n", String(defs.length));
       b.style.setProperty("--r", `${(defs.findIndex((d) => d[0] === tool) - 2) * 6}deg`);
-      b.createDiv({ cls: "fv-pen-cap" });
-      b.createDiv({ cls: "fv-pen-body" });
-      b.createDiv({ cls: "fv-pen-tip" });
-      if (tool === "text") b.createSpan({ cls: "fv-wpen-glyph", text: "Aa" });
+      if (tool === "text") {
+        b.createDiv({ cls: "fv-pen-body" });
+        b.createSpan({ cls: "fv-wpen-glyph", text: "Aa" });
+      } else {
+        b.addClass("fv-pen-svg");
+        b.appendChild(penSvg(tool === "pen" ? "ballpoint" : tool, s.writeColors[tool === "eraser" ? "pen" : tool] ?? "#444"));
+      }
       b.addEventListener("click", (e) => {
         e.stopPropagation();
         this.selectWriteTool(tool);
@@ -1889,6 +1974,7 @@ export class BookStage {
     item("panel-left", "Notebook list", "list", () => this.cb.toggleSidebar());
     item("panel-right", "Outline", "outline", () => this.cb.toggleOutline());
     item("layout-grid", "Shelf mode", "shelf", () => this.cb.shelfRequested());
+    if (this.scene.on) item("library", this.host.settings.shelfHidden ? "Show the shelf" : "Hide the shelf", "toggleshelf", () => this.cb.toggleShelfVisible());
     if (this.notebook && !this.isOpen) {
       item("palette", "Cover options", "cover", () => this.notebook && this.cb.customiseCover(this.notebook));
       item("dices", "Shuffle cover", "shuffle", () => this.shuffleCover());

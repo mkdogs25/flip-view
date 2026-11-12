@@ -3377,257 +3377,6 @@
 }
 
 /* ===================================================================== */
-/* The laptop, sitting on the desk at an angle                            */
-/* ===================================================================== */
-
-.fv-laptop-wrap {
-  position: absolute;
-  inset: var(--fv-top, 76px) 0 var(--fv-bot, 84px) 0;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding-right: 3%;
-  z-index: 6;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.fv-stage.fv-laptop-full .fv-laptop-wrap {
-  justify-content: center;
-  padding-right: 0;
-}
-
-.fv-laptop {
-  --lw: var(--fv-lw, 640px);
-  position: relative;
-  flex: none;
-  width: var(--lw);
-  height: calc(var(--lw) * 0.86);
-  perspective: 1700px;
-  perspective-origin: 50% 20%;
-  transform: translateX(130%);
-  transition: transform 0.9s cubic-bezier(0.3, 0.8, 0.25, 1);
-}
-
-.fv-laptop.is-open {
-  transform: none;
-  pointer-events: auto;
-}
-
-.fv-laptop-rig {
-  position: absolute;
-  left: 4%;
-  top: 4%;
-  width: 92%;
-  height: calc(var(--lw) * 0.58);
-  transform-style: preserve-3d;
-  transform-origin: 50% 100%;
-  transform: rotateX(-30deg) rotateY(-15deg) translateY(2%);
-}
-
-.fv-laptop-shadow {
-  position: absolute;
-  left: -8%;
-  top: 100%;
-  width: 116%;
-  height: calc(var(--lw) * 0.5);
-  transform-origin: 50% 0;
-  transform: rotateX(90deg) translateZ(-3px);
-  background: radial-gradient(ellipse at 50% 38%, rgba(20, 10, 0, 0.55) 0%, rgba(20, 10, 0, 0.3) 45%, transparent 72%);
-  filter: blur(10px);
-}
-
-.fv-laptop-lid {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-  padding: 2.2%;
-  box-sizing: border-box;
-  border-radius: 14px 14px 3px 3px;
-  background: linear-gradient(180deg, #2c2d32, #17171a);
-  box-shadow: inset 0 0 0 1.5px #55575e, 0 0 0 1.5px #aeb0b6;
-  transform-origin: 50% 100%;
-  transform: rotateX(-96deg);
-  opacity: 0;
-  transition: transform 1s cubic-bezier(0.3, 0.9, 0.3, 1) 0.3s, opacity 0.3s 0.3s;
-  backface-visibility: hidden;
-}
-
-.fv-laptop.is-open .fv-laptop-lid {
-  transform: rotateX(7deg);
-  opacity: 1;
-}
-
-.fv-laptop-screen {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-  border-radius: 4px;
-  background: #fff;
-  color: #2a2630;
-}
-
-.fv-laptop-bar {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 8px;
-  background: linear-gradient(180deg, #ecebee, #dddce0);
-  border-bottom: 1px solid #c4c3c8;
-}
-
-.fv-laptop-dots {
-  display: flex;
-  gap: 5px;
-  margin-right: 6px;
-}
-
-.fv-laptop-dots span {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: #ff5f57;
-}
-
-.fv-laptop-dots span:nth-child(2) {
-  background: #febc2e;
-}
-
-.fv-laptop-dots span:nth-child(3) {
-  background: #28c840;
-}
-
-.fv-laptop-url {
-  flex: 1;
-  min-width: 0;
-  margin: 0 4px;
-  padding: 4px 10px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  border-radius: 999px;
-  background: #fff;
-  box-shadow: inset 0 0 0 1px #cfced3;
-  font-size: 12px;
-  color: #55505c;
-}
-
-.fv-root .fv-lap-btn {
-  width: 26px;
-  height: 26px;
-  color: #55505c;
-}
-
-.fv-root .fv-lap-btn:hover {
-  background: rgba(0, 0, 0, 0.08);
-  color: #2a2630;
-}
-
-.fv-lap-btn svg {
-  width: 15px;
-  height: 15px;
-}
-
-.fv-laptop-view {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  background: #fff;
-}
-
-.fv-laptop-view > iframe,
-.fv-laptop-view > webview {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  border: 0;
-  background: #fff;
-}
-
-.fv-laptop-fallback {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 33px;
-  bottom: 0;
-  display: none;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  padding: 24px;
-  text-align: center;
-  background: #f6f5f8;
-  font-size: 13.5px;
-  color: #55505c;
-}
-
-.fv-laptop-fallback.is-visible {
-  display: flex;
-}
-
-.fv-laptop-cam {
-  position: absolute;
-  left: 50%;
-  top: 0.8%;
-  width: 5px;
-  height: 5px;
-  margin-left: -2px;
-  border-radius: 50%;
-  background: #3b3c42;
-}
-
-/* the keyboard deck lies flat on the desk, hinged to the bottom of the lid */
-.fv-laptop-deck {
-  position: absolute;
-  left: -3%;
-  top: 100%;
-  width: 106%;
-  height: calc(var(--lw) * 0.42);
-  transform-origin: 50% 0;
-  transform: rotateX(90deg);
-  border-radius: 3px 3px 22px 22px;
-  background: linear-gradient(180deg, #c8cacf 0%, #d9dade 40%, #cdced3 100%);
-  box-shadow: inset 0 1px 0 #fff, inset 0 -5px 0 rgba(0, 0, 0, 0.14), 0 0 0 1px rgba(0, 0, 0, 0.18);
-}
-
-.fv-laptop-keys {
-  position: absolute;
-  left: 7%;
-  right: 7%;
-  top: 7%;
-  height: 52%;
-  border-radius: 3px;
-  background-color: #1e1f23;
-  background-image: repeating-linear-gradient(90deg, transparent 0 calc(6.25% - 3px), #cfd1d5 calc(6.25% - 3px) 6.25%),
-    repeating-linear-gradient(0deg, transparent 0 calc(20% - 3px), #cfd1d5 calc(20% - 3px) 20%);
-  box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.5);
-}
-
-.fv-laptop-pad {
-  position: absolute;
-  left: 34%;
-  right: 34%;
-  bottom: 9%;
-  height: 24%;
-  border-radius: 6px;
-  background: linear-gradient(180deg, #d3d4d9, #c2c3c9);
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18), inset 0 1px 0 #fff;
-}
-
-@media (max-width: 720px) {
-  .fv-laptop-url {
-    font-size: 11px;
-  }
-}
-
-/* ===================================================================== */
 /* The shelf                                                              */
 /* ===================================================================== */
 
@@ -5636,8 +5385,11 @@
   background-color: var(--fv-board-2);
   background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0 2px, transparent 2px), linear-gradient(180deg, transparent 62%, rgba(0, 0, 0, 0.38)),
     var(--fv-plank-img, linear-gradient(180deg, var(--fv-board-1), var(--fv-board-2)));
-  background-size: auto, auto, 1400px 100%;
-  background-repeat: no-repeat, no-repeat, repeat-x;
+  background-size: auto, auto, 100% 100%;
+  background-repeat: no-repeat;
+}
+.fv-ts-plank {
+  height: 40px;
 }
 
 .fv-ts-plank::after,
@@ -5933,4 +5685,299 @@
 
 .fv-root .fv-ts-full {
   padding: calc(9px * var(--fv-ts-k, 1)) 14px;
+}
+
+
+/* ===================================================================== */
+/* The laptop: the desk photo swaps to the one with a laptop, and the     */
+/* page appears on its screen                                             */
+/* ===================================================================== */
+
+.fv-laptop-wrap {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.fv-laptop {
+  position: absolute;
+  background: #000;
+  border-radius: 3px;
+  box-shadow: 0 0 0 2px #0a0a0c, 0 0 28px rgba(255, 220, 160, 0.25);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s 0.45s;
+  overflow: hidden;
+}
+
+.fv-laptop.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.fv-laptop-screen {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #fff;
+  color: #2a2630;
+}
+
+.fv-laptop-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 6px;
+  background: linear-gradient(180deg, #ecebee, #dddce0);
+  border-bottom: 1px solid #c4c3c8;
+}
+
+.fv-laptop-dots {
+  display: flex;
+  gap: 4px;
+  margin-right: 4px;
+}
+
+.fv-laptop-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ff5f57;
+}
+
+.fv-laptop-dots span:nth-child(2) {
+  background: #febc2e;
+}
+
+.fv-laptop-dots span:nth-child(3) {
+  background: #28c840;
+}
+
+.fv-laptop-url {
+  flex: 1;
+  min-width: 0;
+  margin: 0 3px;
+  padding: 2px 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px #cfced3;
+  font-size: 11px;
+  color: #55505c;
+}
+
+.fv-root .fv-lap-btn {
+  width: 22px;
+  height: 22px;
+  color: #55505c;
+}
+
+.fv-root .fv-lap-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: #2a2630;
+}
+
+.fv-lap-btn svg {
+  width: 13px;
+  height: 13px;
+}
+
+.fv-laptop-view {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: #fff;
+}
+
+.fv-laptop-view > iframe,
+.fv-laptop-view > webview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
+}
+
+.fv-laptop-fallback {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 28px;
+  bottom: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 18px;
+  text-align: center;
+  background: #f6f5f8;
+  font-size: 12.5px;
+  color: #55505c;
+}
+
+.fv-laptop-fallback.is-visible {
+  display: flex;
+}
+
+/* the second desk photo (with the laptop) fades in over the first */
+.fv-root::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: var(--fv-desk-light, none), var(--fv-desk-laptop-img, none);
+  background-size: cover, cover;
+  background-position: center, center;
+  opacity: 0;
+  transition: opacity 0.9s ease;
+}
+
+.fv-root.fv-laptop-on::before {
+  opacity: 1;
+}
+
+/* while the laptop is up: the shelf lifts away and the clutter fades */
+.fv-topshelf {
+  transition: height 0.5s cubic-bezier(0.3, 0.8, 0.3, 1), transform 0.9s cubic-bezier(0.5, 0.05, 0.2, 1);
+}
+
+.fv-scene-stage.is-laptop .fv-topshelf {
+  transform: translateY(-105%);
+}
+
+.fv-scene-stage .fv-cup,
+.fv-scene-stage .fv-legend,
+.fv-scene-stage .fv-desk-things,
+.fv-scene-stage .fv-info {
+  transition: opacity 0.6s;
+}
+
+.fv-scene-stage.is-laptop .fv-cup,
+.fv-scene-stage.is-laptop .fv-legend,
+.fv-scene-stage.is-laptop .fv-desk-things,
+.fv-scene-stage.is-laptop .fv-info {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.fv-stage.is-laptop .fv-bookwrap {
+  transform: translate(var(--fv-lshift, 0px), var(--fv-lshifty, 0px)) scale(var(--fv-lscale, 1));
+}
+
+.fv-stage.is-laptop .fv-deskmat {
+  opacity: 0;
+}
+
+.fv-deskmat {
+  transition: opacity 0.6s;
+}
+
+.fv-topshelf.is-hidden {
+  display: none;
+}
+
+/* realistic pens: the SVG draws everything */
+.fv-pen.fv-pen-svg svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.fv-root .fv-tray .fv-pen.fv-pen-svg {
+  width: 24px;
+  height: 118px;
+}
+
+.fv-root .fv-wtray .fv-pen.fv-pen-svg {
+  width: 22px;
+  height: 118px;
+}
+
+.fv-root .fv-wtray .fv-pen.fv-w-marker {
+  width: 28px;
+}
+
+.fv-root .fv-wtray .fv-pen.fv-w-eraser {
+  width: 34px;
+  height: 86px;
+}
+
+.fv-pen.fv-pen-svg {
+  filter: drop-shadow(-3px 5px 3px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 0.6px rgba(0, 0, 0, 0.5));
+}
+
+/* note text editor, laid over the open pages */
+.fv-editor {
+  position: absolute;
+  inset: 3% 2.5%;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px 14px;
+  border-radius: 6px;
+  background: var(--fv-paper, #fbf6ea);
+  color: #2b2620;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+
+.fv-editor-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fv-editor-title {
+  flex: 1;
+  font-size: 0.9em;
+  opacity: 0.7;
+}
+
+.fv-editor-btn {
+  padding: 4px 14px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  background: rgba(255, 255, 255, 0.6);
+  color: inherit;
+  cursor: pointer;
+}
+
+.fv-editor-btn.mod-cta {
+  background: #3b6fd4;
+  border-color: #2f58b8;
+  color: #fff;
+}
+
+.fv-editor-area {
+  flex: 1;
+  resize: none;
+  border: 0;
+  outline: 0;
+  padding: 8px 4px;
+  background: repeating-linear-gradient(0deg, transparent 0 25px, rgba(60, 90, 160, 0.16) 25px 26px);
+  color: #2b2620;
+  font: 16px/26px var(--font-text, Georgia, serif);
+}
+
+.fv-root.fv-dark .fv-editor {
+  background: #2a2723;
+  color: #e9e2d3;
+}
+
+.fv-root.fv-dark .fv-editor-area {
+  color: #e9e2d3;
+  background: repeating-linear-gradient(0deg, transparent 0 25px, rgba(160, 190, 255, 0.14) 25px 26px);
+}
+
+.fv-root.fv-dark .fv-editor-btn:not(.mod-cta) {
+  background: rgba(255, 255, 255, 0.08);
 }

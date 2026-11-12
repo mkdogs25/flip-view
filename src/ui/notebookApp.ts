@@ -1,5 +1,11 @@
 import { setIcon } from "obsidian";
 import { handFontInfo } from "../render/fonts";
+import deskDark from "../../assets/desk/desk-dark.jpg";
+import deskDarkLaptop from "../../assets/desk/desk-dark-laptop.jpg";
+import deskLight from "../../assets/desk/desk-light.jpg";
+import deskLightLaptop from "../../assets/desk/desk-light-laptop.jpg";
+import shelfDark from "../../assets/shelf/shelf-dark.webp";
+import shelfLight from "../../assets/shelf/shelf-light.webp";
 import { BRICKS, WOODS, brickTexture, leatherTexture, woodTexture } from "../render/textures";
 import { notebookProgress, noteStatus, recentNotes, recordVisit, relativeTime } from "../progress";
 import { Bookmark, Notebook, NotebookHost, NoteRef, ViewMode, isNote, realNoteCount } from "../types";
@@ -126,6 +132,11 @@ export class NotebookApp {
       shelfRequested: () => void this.showShelf(),
       searchRequested: () => this.search.toggle(),
       openSettings: () => host.openSettings(),
+      toggleShelfVisible: () => {
+        host.settings.shelfHidden = !host.settings.shelfHidden;
+        host.saveSettings();
+        this.applySettings();
+      },
     });
     this.topShelf = new TopShelf(this.stage.el, host, {
       pick: (nb, el) => void this.pickFromTop(nb, el),
@@ -265,6 +276,7 @@ export class NotebookApp {
     this.root.toggleClass("fv-classic", !scene);
     this.updateDrawerMode();
     this.topShelf.setCollapsed(scene && s.stripCollapsed);
+    this.topShelf.el.toggleClass("is-hidden", s.shelfHidden);
     this.stage.setScene(scene, scene ? this.stripHeight() : 0);
     const font = handFontInfo(s.handFont);
     const r = this.root.style;
@@ -573,11 +585,12 @@ export class NotebookApp {
     const token = ++this.texToken;
     const r = this.root.style;
     const wood = s.deskWood === "auto" ? (dark ? "walnut" : "oak") : s.deskWood;
-    const shelfWood = dark ? "walnut" : "oak";
+    // the supplied desk photos by default; a generated wood if one is chosen
+    r.setProperty("--fv-desk-laptop-img", `url(${dark ? deskDarkLaptop : deskLightLaptop})`);
+    r.setProperty("--fv-plank-img", `url(${dark ? shelfDark : shelfLight})`);
     const jobs: Array<() => void> = [
-      () => r.setProperty("--fv-desk-img", `url(${woodTexture(1500, 940, WOODS[wood], 3, 124)})`),
+      () => r.setProperty("--fv-desk-img", s.deskWood === "auto" ? `url(${dark ? deskDark : deskLight})` : `url(${woodTexture(1500, 940, WOODS[wood], 3, 124)})`),
       () => r.setProperty("--fv-wall-img", `url(${brickTexture(dark ? "dark" : "light")})`),
-      () => r.setProperty("--fv-plank-img", `url(${woodTexture(1400, 64, WOODS[shelfWood], 9, 64)})`),
       () => r.setProperty("--fv-mat-img", `url(${leatherTexture(dark ? [30, 46, 38] : [158, 104, 62])})`),
     ];
     void BRICKS;
@@ -596,6 +609,7 @@ export class NotebookApp {
 
   /** The shelf takes about a quarter of the window, so shelf : desk is roughly 1 : 3. */
   private stripHeight(): number {
+    if (this.host.settings.shelfHidden) return 0;
     if (this.host.settings.stripCollapsed) return 46;
     const h = this.stage.el.clientHeight || this.root.clientHeight || 900;
     return Math.round(Math.min(300, Math.max(168, h * 0.25)));

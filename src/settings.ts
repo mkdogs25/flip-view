@@ -100,6 +100,10 @@ export class FlipViewSettingTab extends PluginSettingTab {
           .onChange((v) => ((s.layoutStyle = v as "scene" | "classic"), save())),
       );
     new Setting(containerEl)
+      .setName("Show the shelf of covers")
+      .setDesc("Turn off to hide the shelf completely (scene layout). You can still pick notebooks from the menu, the search, or Shelf Mode.")
+      .addToggle((t) => t.setValue(!s.shelfHidden).onChange((v) => ((s.shelfHidden = !v), save())));
+    new Setting(containerEl)
       .setName("Open the notebook when picked from the shelf")
       .addToggle((t) => t.setValue(s.openOnPick).onChange((v) => ((s.openOnPick = v), save())));
     new Setting(containerEl)
@@ -123,7 +127,7 @@ export class FlipViewSettingTab extends PluginSettingTab {
       .addToggle((t) => t.setValue(s.showDesk).onChange((v) => ((s.showDesk = v), save())));
     new Setting(containerEl)
       .setName("Desk wood")
-      .setDesc("The desk and shelf are rendered as real wood boards, in the finish you pick. Auto uses walnut in dark mode and oak in light mode.")
+      .setDesc("Auto uses the desk photos (lighter wood in light mode, darker wood in dark mode). The others render a wooden desk instead.")
       .addDropdown((d) =>
         d
           .addOption("auto", "Auto")

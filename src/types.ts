@@ -187,6 +187,8 @@ export interface FlipViewSettings {
   /** "scene": shelf of covers above the desk, panels as drawers. "classic": sidebars on either side. */
   layoutStyle: "scene" | "classic";
   stripCollapsed: boolean;
+  /** Hide the shelf of covers completely. */
+  shelfHidden: boolean;
   infoCollapsed: boolean;
   /** Open a notebook straight away when you pick it from the shelf. */
   openOnPick: boolean;
@@ -299,6 +301,7 @@ export const DEFAULT_SETTINGS: FlipViewSettings = {
   shelfMode: false,
   layoutStyle: "scene",
   stripCollapsed: false,
+  shelfHidden: false,
   infoCollapsed: false,
   openOnPick: true,
   showPageNumbers: true,
@@ -379,6 +382,10 @@ export interface NotebookHost {
   /** Opens the per-notebook cover options. Resolves when closed. */
   customiseCover(nb: Notebook): Promise<void>;
   openNote(path: string, newTab: boolean): void;
+  /** The note's full text, front matter included. */
+  readNoteText(path: string): Promise<string>;
+  /** Replaces the note's full text. */
+  writeNoteText(path: string, text: string): Promise<void>;
   openLink(href: string, sourcePath: string, newTab: boolean): void;
   openExternal(href: string): void;
   createNotebook(): void;

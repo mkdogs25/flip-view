@@ -26,10 +26,7 @@ export class Laptop {
 
   constructor(parent: HTMLElement, private cb: { close(): void; openExternal(url: string): void }) {
     this.el = parent.createDiv({ cls: "fv-laptop", attr: { "aria-hidden": "true" } });
-    const rig = this.el.createDiv({ cls: "fv-laptop-rig" });
-    rig.createDiv({ cls: "fv-laptop-shadow" });
-    const lid = rig.createDiv({ cls: "fv-laptop-lid" });
-    const screen = lid.createDiv({ cls: "fv-laptop-screen" });
+    const screen = this.el.createDiv({ cls: "fv-laptop-screen" });
     const bar = screen.createDiv({ cls: "fv-laptop-bar" });
     const dots = bar.createDiv({ cls: "fv-laptop-dots" });
     dots.createSpan();
@@ -46,10 +43,15 @@ export class Laptop {
     this.fallbackMsg = this.fallback.createDiv({ cls: "fv-laptop-fallback-msg" });
     const open = this.fallback.createEl("button", { cls: "mod-cta", text: "Open in your browser", attr: { type: "button" } });
     open.addEventListener("click", () => this.url && this.cb.openExternal(this.url));
-    lid.createDiv({ cls: "fv-laptop-cam" });
-    const deck = rig.createDiv({ cls: "fv-laptop-deck" });
-    deck.createDiv({ cls: "fv-laptop-keys" });
-    deck.createDiv({ cls: "fv-laptop-pad" });
+  }
+
+  /** Puts the browser exactly over the screen of the laptop in the desk photo (px, relative to the stage). */
+  setRect(r: { left: number; top: number; width: number; height: number }): void {
+    const st = this.el.style;
+    st.left = `${r.left}px`;
+    st.top = `${r.top}px`;
+    st.width = `${r.width}px`;
+    st.height = `${r.height}px`;
   }
 
   get isOpen(): boolean {

@@ -54,6 +54,18 @@ export class ObsidianHost implements NotebookHost {
     return new Promise((resolve) => new CoverModal(this.plugin.app, this.plugin.settings, nb, resolve).open());
   }
 
+  async readNoteText(path: string): Promise<string> {
+    const file = this.plugin.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) throw new Error("Note not found");
+    return this.plugin.app.vault.read(file);
+  }
+
+  async writeNoteText(path: string, text: string): Promise<void> {
+    const file = this.plugin.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) throw new Error("Note not found");
+    await this.plugin.app.vault.modify(file, text);
+  }
+
   openNote(path: string, newTab: boolean): void {
     const file = this.plugin.app.vault.getAbstractFileByPath(path);
     if (!(file instanceof TFile)) return;

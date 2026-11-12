@@ -28,7 +28,7 @@ const ctx = await esbuild.context({
   sourcemap: prod ? false : "inline",
   treeShaking: true,
   minify: prod,
-  loader: { ".woff2": "dataurl", ".jpg": "dataurl", ".png": "dataurl" },
+  loader: { ".woff2": "dataurl", ".jpg": "dataurl", ".png": "dataurl", ".webp": "dataurl" },
   outfile: "main.js",
 });
 
