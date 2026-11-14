@@ -1,6 +1,6 @@
 import { setIcon } from "obsidian";
 import { NoteStatus } from "../progress";
-import { Bookmark, Highlight, Notebook, isIndex, isSeparator, realNoteCount } from "../types";
+import { Bookmark, bookmarkPage, Highlight, Notebook, isIndex, isSeparator, realNoteCount } from "../types";
 import { iconButton } from "./dom";
 import { Heading } from "./layout";
 
@@ -136,7 +136,7 @@ export class OutlinePanel {
         if (idx < 0) continue;
         const row = box.createDiv({ cls: "fv-ol-hl" });
         setIcon(row.createSpan({ cls: "fv-ol-marked" }), "bookmark");
-        const btn = row.createEl("button", { cls: "fv-ol-heading", text: `${nb.notes[idx].title} · spread ${b.spread + 1}`, attr: { type: "button" } });
+        const btn = row.createEl("button", { cls: "fv-ol-heading", text: `${nb.notes[idx].title} · page ${bookmarkPage(b) + 1}`, attr: { type: "button" } });
         btn.addEventListener("click", () => this.h.jumpBookmark(b));
         iconButton(row, "x", "Remove bookmark").addEventListener("click", () => this.h.removeBookmark(b));
       }

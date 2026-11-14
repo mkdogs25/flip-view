@@ -49,7 +49,7 @@ async function fresh(browser, qs) {
   page = await fresh(browser, "theme=light&mode=text&progress=1");
   await page.click(".fv-cover-front");
   await wait(2000);
-  assert((await page.textContent(".fv-foot-title")) === "Contents", "notebooks open on the index page");
+  assert((await page.textContent(".fv-foot-title")).startsWith("Contents"), "notebooks open on the index page");
   const rows = await page.$$eval(".fv-pagebase.fv-left .fv-idx-row", (e) => e.length);
   assert(rows === 5, `index lists every note (${rows})`);
   assert((await page.$$(".fv-pagebase.fv-left .fv-idx-date")).length === 5, "index shows last-edited dates");
@@ -69,7 +69,7 @@ async function fresh(browser, qs) {
   // jump
   await page.click(".fv-idx-row[data-idx='3']");
   await wait(1700);
-  assert((await page.textContent(".fv-foot-title")) === "Relativity", "clicking an index entry jumps to the note");
+  assert((await page.textContent(".fv-foot-title")).startsWith("Relativity"), "clicking an index entry jumps to the note");
   // read tracking
   const rs = await page.evaluate(() => Object.keys(window.__settings.readState));
   assert(rs.includes("Physics/Relativity.md"), `visited notes are tracked (${rs.length})`);

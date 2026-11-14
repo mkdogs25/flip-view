@@ -90,6 +90,7 @@ export class NoteLayout {
       const clone = this.flow.cloneNode(true) as HTMLElement;
       clone.style.transform = `translateX(${-index * this.step}px)`;
       clone.dataset.page = String(index);
+      clone.dataset.note = this.note.path;
       inner.appendChild(clone);
       if (!this.separator && !this.index) {
         const no = page.createDiv({ cls: "fv-page-no", text: String(opts.folio ?? index + 1) });
@@ -100,8 +101,8 @@ export class NoteLayout {
     this.renderMargins(page, index);
     if (opts.annots) renderInk(page, opts.annots.filter((a) => a.page === index));
     else ensureInkLayer(page);
-    if (this.separator && side === "right" && this.note.sepLevel !== 2) {
-      const tab = page.createDiv({ cls: "fv-sep-tab" });
+    if (this.separator && this.note.sepLevel !== 2) {
+      const tab = page.createDiv({ cls: side === "left" ? "fv-sep-tab is-left" : "fv-sep-tab" });
       tab.createSpan({ text: this.note.title });
     }
     return page;
@@ -240,7 +241,6 @@ export class LayoutEngine {
       if (data) buildIndexFlow(flow, data, this.host.settings);
     } else if (isSeparator(note)) {
       flow.addClass("fv-flow-sep");
-      flow.createDiv({ cls: "fv-sep-spacer" });
       const sep = flow.createDiv({ cls: note.sepLevel === 2 ? "fv-sep is-sub" : "fv-sep" });
       sep.createEl("h1", { cls: "fv-sep-title", text: note.title });
       sep.createDiv({ cls: "fv-sep-flourish" });

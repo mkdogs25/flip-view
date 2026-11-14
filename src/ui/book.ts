@@ -3,7 +3,7 @@ import { handFontInfo } from "../render/fonts";
 import { applyHighlight, highlightColor, removeHighlightEls, textOffsetOf } from "../render/highlights";
 import { Sfx } from "../render/sound";
 import { notebookProgress, noteStatus } from "../progress";
-import { Annotation, Bookmark, Highlight, NoteRef, Notebook, NotebookHost, ViewMode, WriteTool, isIndex, isNote, isSeparator, realNoteCount } from "../types";
+import { Annotation, Bookmark, bookmarkPage, Highlight, NoteRef, Notebook, NotebookHost, ViewMode, WriteTool, isIndex, isNote, isSeparator, realNoteCount } from "../types";
 import { clamp, hashString } from "../util/rng";
 import { formatDate, iconButton, progressEl } from "./dom";
 import { Laptop } from "./laptop";
@@ -25,7 +25,7 @@ export interface StageCallbacks {
   /** The user clicked an internal link inside a page. */
   followInternal(href: string, sourcePath: string): void;
   /** A real note is now on show (for reading progress). */
-  noteVisited(note: NoteRef, spread: number, spreads: number): void;
+  noteVisited(note: NoteRef, spread: number, spreads: number, page: number): void;
   bookmarksChanged(): void;
   shelfRequested(): void;
   searchRequested(): void;
@@ -43,6 +43,19 @@ const EASE_COVER = "cubic-bezier(.55,.05,.25,1)";
 const EASE_PAGE = "cubic-bezier(.45,.05,.3,1)";
 
 type Anim = [HTMLElement, Keyframe[], KeyframeAnimationOptions];
+
+/** One page of one note: which note, its layout, and which page of it. */
+interface PageRef {
+  idx: number;
+  layout: NoteLayout;
+  page: number;
+}
+
+/** What the open book shows: the left-hand page and whatever follows it in the stream of pages. */
+interface Spread {
+  left: PageRef;
+  right: PageRef | null;
+}
 
 /** The desk: draws the closed notebook, opens it with a 3D flip and turns pages. */
 export class BookStage {
@@ -80,8 +93,8 @@ export class BookStage {
   private activePen: number | null = null;
   private baselineKey = "";
   private tally = new PageTally();
-  /** One-page notes sharing a spread: host note index -> the note shown on its right-hand page. */
-  private guests = new Map<number, { idx: number; layout: NoteLayout }>();
+  /** What is on the right-hand page: the next page of this note, or the first page of the next one (null at the very end). */
+  private right: PageRef | null = null;
   private shownKey = "";
   private crawlToken = 0;
   private indexTimer = 0;
@@ -115,7 +128,7 @@ export class BookStage {
   /** A background re-layout is in progress (page turns wait for it instead of being dropped). */
   private rebuilding = false;
   private noteIdx = 0;
-  private spread = 0;
+  private page = 0;
   private layout: NoteLayout | null = null;
   private metrics = { pw: 300, ph: 400, shift: -150 };
   private coverToken = 0;
@@ -403,8 +416,9 @@ export class BookStage {
     this.book.addClass("is-busy");
     try {
       this.noteIdx = clamp(noteIdx, 0, nb.notes.length - 1);
-      this.spread = 0;
+      this.page = 0;
       this.layout = await this.getLayout(this.noteIdx);
+      this.right = await this.rightOf({ idx: this.noteIdx, layout: this.layout, page: 0 });
       this.fillBases();
       this.hint.removeClass("is-visible");
       const d = this.dur(1250);
@@ -469,17 +483,14 @@ export class BookStage {
     if (!this.notebook) return;
     if (!this.isOpen) return void this.open();
     if (!this.layout) return;
-    if (this.spread + 1 < this.layout.spreads) await this.turnTo(this.noteIdx, this.spread + 1);
-    else {
-      const t = await this.neighbour(true);
-      if (t < this.notebook.notes.length) await this.turnTo(t, 0);
-    }
+    const t = this.nextLeft();
+    if (t) await this.turnTo(t.idx, t.page);
   }
 
   async prev(): Promise<void> {
     if (!this.notebook || !this.isOpen || !this.layout) return;
-    if (this.spread > 0) await this.turnTo(this.noteIdx, this.spread - 1);
-    else if (this.noteIdx > 0) await this.turnTo(await this.neighbour(false), Number.MAX_SAFE_INTEGER);
+    const t = await this.prevLeft();
+    if (t) await this.turnTo(t.idx, t.page);
     else await this.close();
   }
 
@@ -582,7 +593,6 @@ export class BookStage {
   /** The note's text changed on disk; the next layout request re-renders it. */
   fileChanged(path: string): void {
     this.engine.invalidate(path);
-    this.guests.clear();
   }
 
   destroy(): void {
@@ -628,7 +638,8 @@ export class BookStage {
     this.busy = false;
     this.layout = null;
     this.noteIdx = 0;
-    this.spread = 0;
+    this.page = 0;
+    this.right = null;
     this.leftBase.empty();
     this.rightBase.empty();
     this.book.removeClass("is-busy");
@@ -752,7 +763,7 @@ export class BookStage {
     return { mode: s.viewMode, w: Math.round(iw), h: Math.round(ih), gap: 48, messiness: s.messiness, tame, lineVar, margin: s.marginNotes, signature: sig };
   }
 
-  private async rawLayout(idx: number): Promise<NoteLayout> {
+  private async getLayout(idx: number): Promise<NoteLayout> {
     const note = this.notebook?.notes[idx];
     if (!note) throw new Error("note index out of range");
     const timer = window.setTimeout(() => this.spinner.addClass("is-visible"), 220);
@@ -765,77 +776,67 @@ export class BookStage {
     }
   }
 
-  private async getLayout(idx: number): Promise<NoteLayout> {
-    const layout = await this.rawLayout(idx);
-    await this.resolveGuest(idx, layout);
-    return layout;
+  /* The book is one stream of pages: the contents, then each note and separator in turn, page after page. A spread
+     is two neighbouring pages of that stream, so a short note shares its spread with the next one and nothing is
+     padded out with blank pages. The position is the left-hand page (noteIdx, page). */
+
+  /** The page that follows `left` in the stream, or null at the end of the notebook. */
+  private async rightOf(left: PageRef): Promise<PageRef | null> {
+    if (left.page + 1 < left.layout.pageCount) return { idx: left.idx, layout: left.layout, page: left.page + 1 };
+    const n = this.notebook?.notes.length ?? 0;
+    if (left.idx + 1 >= n) return null;
+    return { idx: left.idx + 1, layout: await this.getLayout(left.idx + 1), page: 0 };
   }
 
-  /** Position of notes[idx] within its run of consecutive notes (the index page and separators break runs). */
-  private runPos(idx: number): number {
-    const notes = this.notebook?.notes ?? [];
-    let n = 0;
-    for (let i = idx - 1; i >= 0 && isNote(notes[i]); i--) n++;
-    return n;
+  private async spreadAt(noteIdx: number, pageWanted: number): Promise<Spread> {
+    const layout = await this.getLayout(noteIdx);
+    const left: PageRef = { idx: noteIdx, layout, page: clamp(pageWanted, 0, layout.pageCount - 1) };
+    return { left, right: await this.rightOf(left) };
   }
 
-  /** Decides whether a one-page note shares its spread with the one-page note after it. */
-  private async resolveGuest(idx: number, layout: NoteLayout): Promise<void> {
-    this.guests.delete(idx);
-    const notes = this.notebook?.notes ?? [];
-    if (!this.host.settings.packShortNotes || layout.pageCount !== 1 || !isNote(notes[idx]) || this.runPos(idx) % 2 !== 0) return;
-    const next = notes[idx + 1];
-    if (!next || !isNote(next)) return;
-    const l2 = await this.rawLayout(idx + 1);
-    if (l2.pageCount === 1) this.guests.set(idx, { idx: idx + 1, layout: l2 });
+  /** Where the left-hand page lands after turning forwards (two pages on), or null if the book ends here. */
+  private nextLeft(): { idx: number; page: number } | null {
+    const r = this.right;
+    if (!r) return null;
+    if (r.page + 1 < r.layout.pageCount) return { idx: r.idx, page: r.page + 1 };
+    return r.idx + 1 < (this.notebook?.notes.length ?? 0) ? { idx: r.idx + 1, page: 0 } : null;
   }
 
-  /** Whether notes[idx] sits on the right-hand page of the note before it. */
-  private async isGuest(idx: number): Promise<boolean> {
-    const notes = this.notebook?.notes ?? [];
-    if (idx < 1 || !this.host.settings.packShortNotes || !isNote(notes[idx]) || !isNote(notes[idx - 1]) || this.runPos(idx) % 2 !== 1) return false;
-    return (await this.rawLayout(idx)).pageCount === 1 && (await this.rawLayout(idx - 1)).pageCount === 1;
+  private async pageBefore(idx: number, page: number): Promise<{ idx: number; page: number } | null> {
+    if (page > 0) return { idx, page: page - 1 };
+    if (idx <= 0) return null;
+    return { idx: idx - 1, page: (await this.getLayout(idx - 1)).pageCount - 1 };
   }
 
-  /** The note a page turn from the current one lands in, skipping a note that is already on show. */
-  private async neighbour(forward: boolean, from = this.noteIdx): Promise<number> {
-    const last = (this.notebook?.notes.length ?? 1) - 1;
-    if (forward) {
-      const skip = from === this.noteIdx && this.guests.has(from) ? 2 : (await this.hostedBy(from)) ? 2 : 1;
-      return Math.min(last + 1, from + skip);
-    }
-    let t = from - 1;
-    if (t >= 1 && (await this.isGuest(t))) t--;
-    return t;
-  }
-
-  /** Whether the note at idx is already showing as the guest of the note before it (so its own page is skipped). */
-  private async hostedBy(idx: number): Promise<boolean> {
-    return this.guests.has(idx);
+  /** Where the left-hand page lands after turning back (two pages earlier), or null if we are on the first page. */
+  private async prevLeft(): Promise<{ idx: number; page: number } | null> {
+    const one = await this.pageBefore(this.noteIdx, this.page);
+    if (!one) return null;
+    return (await this.pageBefore(one.idx, one.page)) ?? one;
   }
 
   /** A page element with its folio, running head, margin notes and ink. */
   private pageFor(layout: NoteLayout, noteIdx: number, index: number, side: "left" | "right"): HTMLElement {
     const s = this.host.settings;
     const note = layout.note;
-    const folio = isNote(note) && this.notebook ? this.tally.start(this.notebook.notes, noteIdx, s.packShortNotes).folio + index : undefined;
+    const folio = isNote(note) && this.notebook ? this.tally.start(this.notebook.notes, noteIdx).folio + index : undefined;
     const annots = s.annotations[this.annotKey(note.path)];
-    const guest = this.guests.get(noteIdx);
-    if (guest && layout.pageCount === 1 && index === 1 && side === "right" && this.notebook) {
-      const gn = guest.layout.note;
-      const el = guest.layout.pageEl(0, "right", { folio: folio !== undefined ? folio + 1 : undefined, head: gn.title });
-      el.addClass("fv-guest");
-      el.dataset.notePath = gn.path;
-      el.dataset.noteIdx = String(guest.idx);
-      return el;
-    }
-    return layout.pageEl(index, side, { folio, annots, head: isNote(note) ? note.title : undefined });
+    const el = layout.pageEl(index, side, { folio, annots, head: isNote(note) ? note.title : undefined });
+    el.dataset.noteIdx = String(noteIdx);
+    el.dataset.notePath = note.path;
+    return el;
+  }
+
+  /** A page for `ref`, or (past the end of the notebook) an empty page that still takes ink for `owner`'s note. */
+  private elFor(ref: PageRef | null, side: "left" | "right", owner: PageRef): HTMLElement {
+    if (ref) return this.pageFor(ref.layout, ref.idx, ref.page, side);
+    return this.pageFor(owner.layout, owner.idx, owner.layout.pageCount, side);
   }
 
   private fillBases(): void {
     if (!this.layout) return;
-    this.leftBase.replaceChildren(this.pageFor(this.layout, this.noteIdx, this.spread * 2, "left"));
-    this.rightBase.replaceChildren(this.pageFor(this.layout, this.noteIdx, this.spread * 2 + 1, "right"));
+    this.leftBase.replaceChildren(this.pageFor(this.layout, this.noteIdx, this.page, "left"));
+    this.rightBase.replaceChildren(this.elFor(this.right, "right", { idx: this.noteIdx, layout: this.layout, page: this.page }));
   }
 
   /** Re-measures and redraws the current spread (resize, mode switch, settings, file edit). */
@@ -854,9 +855,10 @@ export class BookStage {
       this.layout = await this.getLayout(this.noteIdx);
       if (prevPages && this.layout.pageCount !== prevPages) {
         // keep roughly the same reading position
-        this.spread = clamp(Math.round((this.spread / Math.max(1, Math.ceil(prevPages / 2))) * this.layout.spreads), 0, this.layout.spreads - 1);
+        this.page = Math.round((this.page / prevPages) * this.layout.pageCount);
       }
-      this.spread = clamp(this.spread, 0, this.layout.spreads - 1);
+      this.page = clamp(this.page, 0, this.layout.pageCount - 1);
+      this.right = await this.rightOf({ idx: this.noteIdx, layout: this.layout, page: this.page });
       this.fillBases();
     } catch (err) {
       console.error("[flip-view] failed to rebuild pages", err);
@@ -873,7 +875,7 @@ export class BookStage {
     this.cb.modeChanged(mode);
   }
 
-  private async turnTo(noteIdx: number, spreadWanted: number): Promise<void> {
+  private async turnTo(noteIdx: number, pageWanted: number): Promise<void> {
     // a background re-layout (for example refreshing the contents) should delay a page turn, not swallow it
     for (let i = 0; i < 60 && this.busy && this.rebuilding && !this.destroyed; i++) await new Promise((r) => window.setTimeout(r, 50));
     if (this.busy || !this.isOpen || !this.notebook || !this.layout) return;
@@ -882,24 +884,20 @@ export class BookStage {
     this.book.addClass("is-busy");
     this.toc.removeClass("is-open");
     try {
-      const target = await this.getLayout(noteIdx);
-      const spread = clamp(spreadWanted, 0, target.spreads - 1);
-      if (noteIdx === this.noteIdx && spread === this.spread) return;
-      const forward = noteIdx > this.noteIdx || (noteIdx === this.noteIdx && spread > this.spread);
-      const cur = this.layout;
-      const curSpread = this.spread;
+      const target = await this.spreadAt(noteIdx, pageWanted);
+      const { left } = target;
+      if (left.idx === this.noteIdx && left.page === this.page) return;
+      const forward = left.idx > this.noteIdx || (left.idx === this.noteIdx && left.page > this.page);
       const d = this.dur(900);
 
       if (d === 0) {
-        this.layout = target;
-        this.noteIdx = noteIdx;
-        this.spread = spread;
+        this.land(target);
         this.fillBases();
         return;
       }
 
       this.sfx.pageTurn(d);
-      const { leaf, front, back, cast, land, sign } = this.makeLeaf(forward, target, noteIdx, spread);
+      const { leaf, front, back, cast, land, sign } = this.makeLeaf(forward, target);
       await this.animate(
         [
           [leaf, [{ transform: "rotateY(0deg)" }, { transform: `rotateY(${180 * sign}deg)` }], { duration: d, easing: EASE_PAGE }],
@@ -913,9 +911,7 @@ export class BookStage {
           cast.remove();
         },
       );
-      this.layout = target;
-      this.noteIdx = noteIdx;
-      this.spread = spread;
+      this.land(target);
     } catch (err) {
       console.error("[flip-view] failed to turn page", err);
     } finally {
@@ -927,31 +923,38 @@ export class BookStage {
     }
   }
 
+  /** Makes `sp` the current spread (the pages themselves are put in place by the caller). */
+  private land(sp: Spread): void {
+    this.layout = sp.left.layout;
+    this.noteIdx = sp.left.idx;
+    this.page = sp.left.page;
+    this.right = sp.right;
+  }
+
   /** Builds the turning leaf (faces, shading) and swaps the page underneath, ready to be rotated. */
-  private makeLeaf(forward: boolean, target: NoteLayout, targetIdx: number, spread: number) {
-    const cur = this.layout as NoteLayout;
-    const curSpread = this.spread;
+  private makeLeaf(forward: boolean, target: Spread) {
     const leaf = this.book.createDiv({ cls: `fv-leaf ${forward ? "fv-leaf-next" : "fv-leaf-prev"}` });
     const front = leaf.createDiv({ cls: "fv-leaf-face fv-face-front" });
     const back = leaf.createDiv({ cls: "fv-leaf-face fv-face-back" });
     front.createDiv({ cls: "fv-shade" });
     back.createDiv({ cls: "fv-shade" });
     const cast = this.book.createDiv({ cls: `fv-cast ${forward ? "fv-cast-right" : "fv-cast-left"}` });
+    const curLeft: PageRef = { idx: this.noteIdx, layout: this.layout as NoteLayout, page: this.page };
     let land: () => void;
     let undo: () => void;
     if (forward) {
       const old = this.rightBase.firstElementChild;
-      this.rightBase.replaceChildren(this.pageFor(target, targetIdx, spread * 2 + 1, "right"));
-      front.prepend(this.pageFor(cur, this.noteIdx, curSpread * 2 + 1, "right"));
-      const landed = this.pageFor(target, targetIdx, spread * 2, "left");
+      this.rightBase.replaceChildren(this.elFor(target.right, "right", target.left));
+      front.prepend(this.elFor(this.right, "right", curLeft));
+      const landed = this.elFor(target.left, "left", target.left);
       back.prepend(landed);
       land = () => this.leftBase.replaceChildren(landed);
       undo = () => old && this.rightBase.replaceChildren(old);
     } else {
       const old = this.leftBase.firstElementChild;
-      this.leftBase.replaceChildren(this.pageFor(target, targetIdx, spread * 2, "left"));
-      front.prepend(this.pageFor(cur, this.noteIdx, curSpread * 2, "left"));
-      const landed = this.pageFor(target, targetIdx, spread * 2 + 1, "right");
+      this.leftBase.replaceChildren(this.elFor(target.left, "left", target.left));
+      front.prepend(this.elFor(curLeft, "left", curLeft));
+      const landed = this.elFor(target.right, "right", target.left);
       back.prepend(landed);
       land = () => this.rightBase.replaceChildren(landed);
       undo = () => old && this.leftBase.replaceChildren(old);
@@ -991,21 +994,15 @@ export class BookStage {
 
   private async startDrag(forward: boolean, startX: number, currentX: () => number, isReleased: () => boolean): Promise<void> {
     if (this.busy || !this.isOpen || !this.notebook || !this.layout) return;
-    let tNote = this.noteIdx;
-    let tSpread = this.spread + (forward ? 1 : -1);
-    if (tSpread >= this.layout.spreads || tSpread < 0) {
-      tNote = await this.neighbour(forward);
-      tSpread = forward ? 0 : Number.MAX_SAFE_INTEGER;
-    }
-    if (tNote < 0 || tNote >= this.notebook.notes.length) return;
+    const dest = forward ? this.nextLeft() : await this.prevLeft();
+    if (!dest) return;
     this.busy = true;
     this.book.addClass("is-busy");
     this.toc.removeClass("is-open");
     let parts: ReturnType<BookStage["makeLeaf"]> | null = null;
     try {
-      const target = await this.getLayout(tNote);
-      const spread = clamp(tSpread, 0, target.spreads - 1);
-      parts = this.makeLeaf(forward, target, tNote, spread);
+      const target = await this.spreadAt(dest.idx, dest.page);
+      parts = this.makeLeaf(forward, target);
       const p = parts;
       const pw = this.metrics.pw;
       let progress = 0;
@@ -1046,9 +1043,7 @@ export class BookStage {
       }
       if (complete) {
         p.land();
-        this.layout = target;
-        this.noteIdx = tNote;
-        this.spread = spread;
+        this.land(target);
       } else {
         p.undo();
       }
@@ -1144,9 +1139,9 @@ export class BookStage {
   private onPageClick(e: MouseEvent): void {
     const target = e.target as HTMLElement;
     const hl = target.closest<HTMLElement>(".fv-hl");
-    if (hl && this.activePen !== null && !hl.closest(".fv-guest") && window.getSelection()?.isCollapsed !== false) {
+    if (hl && this.activePen !== null && window.getSelection()?.isCollapsed !== false) {
       e.preventDefault();
-      if (hl.dataset.hl) this.removeHighlight(hl.dataset.hl);
+      if (hl.dataset.hl) this.removeHighlight(hl.dataset.hl, hl);
       return;
     }
     const row = target.closest<HTMLElement>(".fv-idx-row, .fv-idx-section");
@@ -1164,8 +1159,8 @@ export class BookStage {
     e.stopPropagation();
     const href = a.getAttribute("data-href") ?? a.getAttribute("href");
     if (!href) return;
-    const guestPage = target.closest<HTMLElement>(".fv-guest");
-    const source = guestPage?.dataset.notePath ?? this.currentNote()?.path ?? "";
+    const owner = this.ownerOf(target);
+    const source = owner?.note.path ?? this.currentNote()?.path ?? "";
     const newTab = e.ctrlKey || e.metaKey;
     const isUrl = /^[a-z][a-z0-9+.-]*:/i.test(href);
     if (isUrl) {
@@ -1174,7 +1169,7 @@ export class BookStage {
     } else if (newTab) {
       this.host.openLink(href, source, true);
     } else if (href.startsWith("#")) {
-      const i = guestPage ? Number(guestPage.dataset.noteIdx) : this.noteIdx;
+      const i = owner ? owner.idx : this.noteIdx;
       void this.goTo(i, href.slice(1).split("#").pop());
     } else {
       this.cb.followInternal(href, source);
@@ -1334,12 +1329,12 @@ export class BookStage {
       this.lastEditText.createDiv({ text: formatDate(seen ? seen.last : note.mtime) });
     }
     if (open && note && this.notebook) {
-      const g = this.guests.get(this.noteIdx);
-      this.footTitle.setText(g && this.layout?.pageCount === 1 ? `${note.title} \u00b7 ${g.layout.note.title}` : note.title);
+      const rn = this.right && this.right.idx !== this.noteIdx ? this.notebook.notes[this.right.idx] : null;
+      this.footTitle.setText(rn ? `${note.title} \u00b7 ${rn.title}` : note.title);
       this.footCount.setText(`${this.noteIdx + 1} / ${this.notebook.notes.length}`);
-      this.btnNext.disabled = !this.layout || (this.noteIdx >= this.notebook.notes.length - 1 && this.spread >= this.layout.spreads - 1);
+      this.btnNext.disabled = !this.layout || !this.nextLeft();
       this.btnPrev.disabled = false;
-      this.btnPrev.setAttr("aria-label", this.noteIdx === 0 && this.spread === 0 ? "Close notebook" : "Previous page");
+      this.btnPrev.setAttr("aria-label", this.noteIdx === 0 && this.page === 0 ? "Close notebook" : "Previous page");
     }
     this.cover.toggleClass("is-empty", !nb || nb.notes.length === 0);
     this.btnBookmark.toggleClass("is-hidden", !open || isIndex(note));
@@ -1348,10 +1343,13 @@ export class BookStage {
     this.ribbonEl.toggleClass("has-marks", this.bookmarksOf().length > 0);
     this.ribbonEl.toggleClass("is-here", this.isBookmarked());
     if (open && this.layout && !this.busy && note) {
-      const key = `${nb?.id}|${this.noteIdx}|${this.spread}`;
+      const key = `${nb?.id}|${this.noteIdx}|${this.page}`;
       if (key !== this.shownKey) {
         this.shownKey = key;
-        if (isNote(note)) this.cb.noteVisited(note, this.spread, this.layout.spreads);
+        if (isNote(note)) this.cb.noteVisited(note, Math.floor(this.page / 2), this.layout.spreads, this.page);
+        const r = this.right;
+        const rnote = r ? this.notebook?.notes[r.idx] : null;
+        if (r && rnote && r.idx !== this.noteIdx && isNote(rnote)) this.cb.noteVisited(rnote, Math.floor(r.page / 2), r.layout.spreads, r.page);
         this.refreshFolios();
       }
     } else if (!open) this.shownKey = "";
@@ -1425,14 +1423,13 @@ export class BookStage {
     if (!nb) return null;
     const s = this.host.settings;
     const marks = s.bookmarks[nb.id] ?? [];
-    const folios = nb.notes.map((n, i) => (isNote(n) ? this.tally.start(nb.notes, i, s.packShortNotes) : null));
+    const folios = nb.notes.map((n, i) => (isNote(n) ? this.tally.start(nb.notes, i) : null));
     const sig = [
       this.tally.version,
       nb.notes.map((n) => `${n.path}:${n.mtime}`).join(","),
       nb.notes.map((n) => noteStatus(s, n.path)).join(""),
       marks.map((m) => m.path).join(","),
       s.indexTitle,
-      s.packShortNotes,
       s.indexPageNumbers,
       s.indexLastEdited,
       s.indexCreated,
@@ -1456,9 +1453,10 @@ export class BookStage {
   /** Page numbers printed on the visible pages follow the tally as it firms up. */
   private refreshFolios(): void {
     if (!this.isOpen || !this.notebook || !isNote(this.currentNote())) return;
-    const first = this.tally.start(this.notebook.notes, this.noteIdx, this.host.settings.packShortNotes).folio;
+    const notes = this.notebook.notes;
     this.book.querySelectorAll<HTMLElement>(".fv-pagebase .fv-page-no").forEach((el) => {
-      el.setText(String(first + (el.closest(".fv-guest") ? 1 : Number(el.dataset.index ?? 0))));
+      const idx = Number(el.closest<HTMLElement>(".fv-page")?.dataset.noteIdx ?? this.noteIdx);
+      el.setText(String(this.tally.start(notes, idx).folio + Number(el.dataset.index ?? 0)));
     });
   }
 
@@ -1489,7 +1487,7 @@ export class BookStage {
 
   private isBookmarked(): boolean {
     const n = this.currentNote();
-    return !!n && this.bookmarksOf().some((b) => b.path === n.path && b.spread === this.spread);
+    return !!n && this.bookmarksOf().some((b) => b.path === n.path && bookmarkPage(b) === this.page);
   }
 
   toggleBookmark(): void {
@@ -1497,9 +1495,9 @@ export class BookStage {
     const n = this.currentNote();
     if (!nb || !n || !this.isOpen || isIndex(n)) return;
     const list = (this.host.settings.bookmarks[nb.id] ??= []);
-    const i = list.findIndex((b) => b.path === n.path && b.spread === this.spread);
+    const i = list.findIndex((b) => b.path === n.path && bookmarkPage(b) === this.page);
     if (i >= 0) list.splice(i, 1);
-    else list.push({ path: n.path, spread: this.spread, at: Date.now() });
+    else list.push({ path: n.path, spread: Math.floor(this.page / 2), page: this.page, at: Date.now() });
     this.host.saveSettings();
     this.sfx.pen(i < 0);
     this.updateChrome();
@@ -1512,24 +1510,24 @@ export class BookStage {
     const nb = this.notebook;
     const marks = this.bookmarksOf();
     if (!nb || marks.length === 0) return;
-    const pos = (b: Bookmark) => nb.notes.findIndex((n) => n.path === b.path) * 1000 + b.spread;
-    const here = this.isOpen ? this.noteIdx * 1000 + this.spread : -1;
+    const pos = (b: Bookmark) => nb.notes.findIndex((n) => n.path === b.path) * 1000 + bookmarkPage(b);
+    const here = this.isOpen ? this.noteIdx * 1000 + this.page : -1;
     const ordered = [...marks].filter((b) => nb.notes.some((n) => n.path === b.path)).sort((a, b) => pos(a) - pos(b));
     const next = ordered.find((b) => pos(b) > here) ?? ordered[0];
     if (!next) return;
     const idx = nb.notes.findIndex((n) => n.path === next.path);
     if (!this.isOpen) {
       await this.open(idx);
-      if (next.spread > 0) await this.turnTo(idx, next.spread);
-    } else await this.turnTo(idx, next.spread);
+      if (bookmarkPage(next) > 0) await this.turnTo(idx, bookmarkPage(next));
+    } else await this.turnTo(idx, bookmarkPage(next));
   }
 
   jumpToBookmark(b: Bookmark): void {
     const nb = this.notebook;
     const idx = nb ? nb.notes.findIndex((n) => n.path === b.path) : -1;
     if (idx < 0) return;
-    if (!this.isOpen) void this.open(idx).then(async () => { if (b.spread > 0) await this.turnTo(idx, b.spread); });
-    else void this.turnTo(idx, b.spread);
+    if (!this.isOpen) void this.open(idx).then(async () => { if (bookmarkPage(b) > 0) await this.turnTo(idx, bookmarkPage(b)); });
+    else void this.turnTo(idx, bookmarkPage(b));
   }
 
   /* ------------------------------------------------------- outline support */
@@ -1556,12 +1554,11 @@ export class BookStage {
 
   async jumpToPage(noteIdx: number, page: number): Promise<void> {
     if (!this.notebook) return;
-    const spread = Math.floor(page / 2);
     if (!this.isOpen) {
       await this.open(noteIdx);
-      if (spread > 0) await this.turnTo(noteIdx, spread);
+      if (page > 0) await this.turnTo(noteIdx, page);
     } else {
-      await this.turnTo(noteIdx, spread);
+      await this.turnTo(noteIdx, page);
     }
   }
 
@@ -1770,24 +1767,38 @@ export class BookStage {
     this.renderTools();
   }
 
+  /** The note a page (or anything inside it) belongs to: the two visible pages can be from different notes. */
+  private ownerOf(el: Element | null): { idx: number; note: NoteRef; layout: NoteLayout } | null {
+    const pg = el?.closest<HTMLElement>(".fv-page");
+    const idx = pg?.dataset.noteIdx !== undefined ? Number(pg.dataset.noteIdx) : this.noteIdx;
+    const note = this.notebook?.notes[idx];
+    const layout = idx === this.noteIdx ? this.layout : this.right && this.right.idx === idx ? this.right.layout : null;
+    return note && layout ? { idx, note, layout } : null;
+  }
+
   /** Ink is stored per note and per view, because the two views break the pages differently. */
   private annotKey(path: string): string {
     return this.host.settings.viewMode === "text" ? `text:${path}` : path;
   }
 
-  private currentAnnots(): Annotation[] {
-    const n = this.currentNote();
-    return n ? (this.host.settings.annotations[this.annotKey(n.path)] ??= []) : [];
+  private currentAnnots(note: NoteRef | undefined | null = this.currentNote()): Annotation[] {
+    return note ? (this.host.settings.annotations[this.annotKey(note.path)] ??= []) : [];
   }
 
   private renderVisibleInk(): void {
-    const all = this.currentAnnots();
-    this.book.querySelectorAll<HTMLElement>(".fv-pagebase .fv-page").forEach((p) => renderInk(p, all.filter((a) => a.page === Number(p.dataset.index))));
+    const notes = this.notebook?.notes ?? [];
+    this.book.querySelectorAll<HTMLElement>(".fv-pagebase .fv-page").forEach((p) => {
+      const note = notes[Number(p.dataset.noteIdx ?? this.noteIdx)];
+      const all = note ? this.host.settings.annotations[this.annotKey(note.path)] ?? [] : [];
+      renderInk(p, all.filter((a) => a.page === Number(p.dataset.index)));
+    });
   }
 
+  private lastInk: NoteRef | null = null;
+
   private undoInk(): void {
-    const n = this.currentNote();
-    const list = this.currentAnnots();
+    const n = this.lastInk ?? this.currentNote();
+    const list = this.currentAnnots(n);
     if (!n || list.length === 0) return;
     list.pop();
     if (list.length === 0) delete this.host.settings.annotations[this.annotKey(n.path)];
@@ -1796,9 +1807,8 @@ export class BookStage {
     this.sfx.erase();
   }
 
-  private commitAnnot(a: Annotation): void {
-    const n = this.currentNote();
-    if (!n) return;
+  private commitAnnot(a: Annotation, n: NoteRef): void {
+    this.lastInk = n;
     (this.host.settings.annotations[this.annotKey(n.path)] ??= []).push(a);
     this.host.saveSettings();
   }
@@ -1807,8 +1817,8 @@ export class BookStage {
     const tool = this.writeTool;
     if (!tool || e.button !== 0 || !this.isOpen || this.busy) return;
     const pageEl = (e.target as HTMLElement).closest<HTMLElement>(".fv-pagebase .fv-page");
-    const note = this.currentNote();
-    if (!pageEl || !note || isIndex(note) || pageEl.classList.contains("fv-guest")) return;
+    const note = this.ownerOf(pageEl)?.note;
+    if (!pageEl || !note || isIndex(note)) return;
     if ((e.target as HTMLElement).closest(".fv-ink-edit")) return;
     e.preventDefault();
     e.stopPropagation();
@@ -1816,8 +1826,8 @@ export class BookStage {
     const idx = Number(pageEl.dataset.index ?? 0);
     const rect = pageEl.getBoundingClientRect();
     const at = (ev: PointerEvent): [number, number] => [clamp((ev.clientX - rect.left) / rect.width, 0, 1), clamp((ev.clientY - rect.top) / rect.height, 0, 1)];
-    if (tool === "text") return this.startText(pageEl, idx, e);
-    if (tool === "eraser") return this.startErase(pageEl, idx, e);
+    if (tool === "text") return this.startText(pageEl, idx, e, note);
+    if (tool === "eraser") return this.startErase(pageEl, idx, e, note);
 
     const color = this.host.settings.writeColors[tool];
     const points: number[] = [...at(e)];
@@ -1836,7 +1846,7 @@ export class BookStage {
       document.removeEventListener("pointercancel", up);
       live.remove();
       if (points.length < 2) return;
-      this.commitAnnot({ id: Math.random().toString(36).slice(2, 9), kind: "stroke", page: idx, tool, color, points: points.map((v) => Math.round(v * 10000) / 10000) });
+      this.commitAnnot({ id: Math.random().toString(36).slice(2, 9), kind: "stroke", page: idx, tool, color, points: points.map((v) => Math.round(v * 10000) / 10000) }, note);
       this.renderVisibleInk();
       this.sfx.marker(points.length / 2);
     };
@@ -1845,10 +1855,8 @@ export class BookStage {
     document.addEventListener("pointercancel", up);
   }
 
-  private startText(pageEl: HTMLElement, idx: number, e: PointerEvent): void {
-    const note = this.currentNote();
-    if (!note) return;
-    const list = this.currentAnnots();
+  private startText(pageEl: HTMLElement, idx: number, e: PointerEvent, note: NoteRef): void {
+    const list = this.currentAnnots(note);
     let existing: Annotation | undefined;
     for (const el of Array.from(pageEl.querySelectorAll<HTMLElement>(".fv-ink-text"))) {
       const r = el.getBoundingClientRect();
@@ -1904,9 +1912,7 @@ export class BookStage {
     }, 0);
   }
 
-  private startErase(pageEl: HTMLElement, idx: number, e: PointerEvent): void {
-    const note = this.currentNote();
-    if (!note) return;
+  private startErase(pageEl: HTMLElement, idx: number, e: PointerEvent, note: NoteRef): void {
     let removed = false;
     const hit = (ev: PointerEvent): void => {
       const list = this.host.settings.annotations[this.annotKey(note.path)];
@@ -1970,14 +1976,15 @@ export class BookStage {
 
   private onDblClick(e: MouseEvent): void {
     const mark = (e.target as HTMLElement).closest<HTMLElement>(".fv-hl");
-    if (!mark || !mark.dataset.hl || !this.isOpen || mark.closest(".fv-guest")) return;
+    if (!mark || !mark.dataset.hl || !this.isOpen) return;
     e.preventDefault();
     window.getSelection()?.removeAllRanges();
     this.showHlPop(mark, e);
   }
 
   private showHlPop(mark: HTMLElement, e: MouseEvent): void {
-    const note = this.currentNote();
+    const owner = this.ownerOf(mark);
+    const note = owner?.note;
     const id = mark.dataset.hl as string;
     const h = note ? this.host.settings.highlights[note.path]?.find((x) => x.id === id) : undefined;
     if (!note || !h) return;
@@ -1994,7 +2001,7 @@ export class BookStage {
         h.slot = i;
         h.color = p.color;
         this.host.saveSettings();
-        this.layout?.recolorHighlight(id, p.color);
+        owner?.layout.recolorHighlight(id, p.color);
         this.book.querySelectorAll<HTMLElement>(`.fv-pagebase .fv-hl[data-hl="${id}"]`).forEach((el) => el.style.setProperty("--hl", p.color));
         this.sfx.pen(true);
         this.cb.stateChanged();
@@ -2017,7 +2024,7 @@ export class BookStage {
     del.createSpan({ text: "Remove highlight" });
     del.addEventListener("click", () => {
       this.closeHlPop();
-      this.removeHighlight(id);
+      this.removeHighlight(id, mark);
     });
     const r = this.el.getBoundingClientRect();
     pop.style.left = `${clamp(e.clientX - r.left - 100, 8, r.width - 216)}px`;
@@ -2030,8 +2037,9 @@ export class BookStage {
     if ((h.note ?? "") === text) return;
     h.note = text || undefined;
     this.host.saveSettings();
-    const layout = this.layout;
-    if (!layout) return;
+    const owner = this.ownerOf(mark);
+    const layout = owner?.layout;
+    if (!owner || !layout) return;
     const flow = mark.closest<HTMLElement>(".fv-flow");
     const inner = mark.closest<HTMLElement>(".fv-page-inner");
     const i = layout.margins.findIndex((m) => m.hlId === h.id);
@@ -2040,7 +2048,7 @@ export class BookStage {
       const y = (mark.getClientRects()[0]?.top ?? inner.getBoundingClientRect().top) - inner.getBoundingClientRect().top;
       layout.margins.push({ page: Number(flow.dataset.page ?? 0), y, text, hlId: h.id });
     }
-    this.book.querySelectorAll<HTMLElement>(".fv-pagebase .fv-page").forEach((p) => layout.renderMargins(p, Number(p.dataset.index)));
+    this.book.querySelectorAll<HTMLElement>(`.fv-pagebase .fv-page[data-note-idx="${owner.idx}"]`).forEach((p) => layout.renderMargins(p, Number(p.dataset.index)));
   }
 
   private selectPen(i: number | null): void {
@@ -2066,13 +2074,15 @@ export class BookStage {
   private commitSelection(): void {
     const slot = this.activePen;
     const sel = window.getSelection();
-    const note = this.currentNote();
-    if (slot === null || !sel || sel.isCollapsed || sel.rangeCount === 0 || !note || !this.layout || this.layout.separator) return;
+    if (slot === null || !sel || sel.isCollapsed || sel.rangeCount === 0) return;
     const range = sel.getRangeAt(0);
     const anc = range.commonAncestorContainer;
     const host = anc instanceof Element ? anc : anc.parentElement;
     const flow = host?.closest<HTMLElement>(".fv-flow");
-    if (!flow || !this.book.contains(flow) || flow.closest(".fv-leaf, .fv-guest")) return;
+    if (!flow || !this.book.contains(flow) || flow.closest(".fv-leaf")) return;
+    const owner = this.ownerOf(flow);
+    if (!owner || owner.layout.separator) return;
+    const note = owner.note;
     const text = flow.textContent ?? "";
     let start = textOffsetOf(flow, range.startContainer, range.startOffset);
     let end = textOffsetOf(flow, range.endContainer, range.endOffset);
@@ -2085,15 +2095,18 @@ export class BookStage {
     const h: Highlight = { id: Math.random().toString(36).slice(2, 10), start, end, quote: text.slice(start, end), slot, color: pen.color };
     (this.host.settings.highlights[note.path] ??= []).push(h);
     this.host.saveSettings();
-    this.layout.addHighlight(h, pen.color, Number(flow.dataset.page ?? 0));
-    this.book.querySelectorAll<HTMLElement>(".fv-pagebase .fv-flow").forEach((f) => applyHighlight(f, h, pen.color));
+    owner.layout.addHighlight(h, pen.color, Number(flow.dataset.page ?? 0));
+    this.book.querySelectorAll<HTMLElement>(".fv-pagebase .fv-flow").forEach((f) => {
+      if (f.dataset.note === note.path) applyHighlight(f, h, pen.color);
+    });
     this.sfx.marker(h.quote.length);
     this.cb.stateChanged();
   }
 
-  removeHighlight(id: string): void {
-    const note = this.currentNote();
-    if (!note) return;
+  removeHighlight(id: string, from?: Element): void {
+    const owner = from ? this.ownerOf(from) : this.ownerOf(null);
+    const note = owner?.note;
+    if (!owner || !note) return;
     const list = this.host.settings.highlights[note.path];
     if (list) {
       const next = list.filter((h) => h.id !== id);
@@ -2101,10 +2114,10 @@ export class BookStage {
       else delete this.host.settings.highlights[note.path];
     }
     this.host.saveSettings();
-    this.layout?.removeHighlight(id);
+    owner.layout.removeHighlight(id);
     this.book.querySelectorAll<HTMLElement>(".fv-pagebase .fv-flow").forEach((f) => removeHighlightEls(f, id));
-    const lay = this.layout;
-    if (lay) this.book.querySelectorAll<HTMLElement>(".fv-pagebase .fv-page").forEach((p) => lay.renderMargins(p, Number(p.dataset.index)));
+    const lay = owner.layout;
+    this.book.querySelectorAll<HTMLElement>(`.fv-pagebase .fv-page[data-note-idx="${owner.idx}"]`).forEach((p) => lay.renderMargins(p, Number(p.dataset.index)));
     this.sfx.erase();
     this.cb.stateChanged();
   }

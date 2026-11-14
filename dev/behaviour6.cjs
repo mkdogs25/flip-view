@@ -56,10 +56,10 @@ const shots = path.join(__dirname, "shots");
   await page.focus(".fv-root");
   await page.keyboard.press("End");
   await wait(1700);
-  assert((await page.textContent(".fv-foot-title")) === "Fluid Dynamics", "End jumps to the last note");
+  assert((await page.textContent(".fv-foot-title")).startsWith("Fluid Dynamics"), "End jumps to the last note");
   await page.keyboard.press("Home");
   await wait(1700);
-  assert((await page.textContent(".fv-foot-title")) === "Contents", "Home jumps to the first page");
+  assert((await page.textContent(".fv-foot-title")).startsWith("Contents"), "Home jumps to the first page");
 
   // wheel flipping
   await page.evaluate(() => {

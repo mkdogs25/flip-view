@@ -131,9 +131,14 @@ export interface ReadEntry {
 
 export interface Bookmark {
   path: string;
+  /** Older bookmarks: the spread within the note. */
   spread: number;
+  /** The left-hand page within the note (newer bookmarks; otherwise twice `spread`). */
+  page?: number;
   at: number;
 }
+
+export const bookmarkPage = (b: Bookmark): number => b.page ?? b.spread * 2;
 
 /** A cover picture the user uploaded (already cropped to the cover's shape) and the colours worked out from it. */
 export interface CustomCover {
@@ -217,9 +222,7 @@ export interface FlipViewSettings {
   wheelFlip: boolean;
   /** Reopen the notebook and page you were last reading when the view opens. */
   resumeReading: boolean;
-  lastPosition: { nb: string; path: string; spread: number } | null;
-  /** Two one-page notes in a row share a spread instead of each leaving a blank facing page. */
-  packShortNotes: boolean;
+  lastPosition: { nb: string; path: string; page: number } | null;
   /** How far the notebook leans back on the desk, in degrees (0 = flat on, 17 = default). */
   bookTilt: number;
   infoCollapsed: boolean;
@@ -347,7 +350,6 @@ export const DEFAULT_SETTINGS: FlipViewSettings = {
   wheelFlip: false,
   resumeReading: false,
   lastPosition: null,
-  packShortNotes: true,
   bookTilt: 17,
   infoCollapsed: false,
   openOnPick: true,

@@ -8,7 +8,7 @@ import shelfDark from "../../assets/shelf/shelf-dark.webp";
 import shelfLight from "../../assets/shelf/shelf-light.webp";
 import { BRICKS, WOODS, brickTexture, woodTexture } from "../render/textures";
 import { notebookProgress, noteStatus, recentNotes, recordVisit, relativeTime } from "../progress";
-import { Bookmark, Notebook, NotebookHost, NoteRef, ViewMode, isNote, realNoteCount } from "../types";
+import { Bookmark, bookmarkPage, Notebook, NotebookHost, NoteRef, ViewMode, isNote, realNoteCount } from "../types";
 import { BookStage } from "./book";
 import { iconButton, progressEl } from "./dom";
 import { OutlinePanel } from "./outline";
@@ -128,7 +128,7 @@ export class NotebookApp {
       customiseCover: (nb) => void this.customiseCover(nb),
       stateChanged: () => this.refreshOutline(),
       followInternal: (href, source) => void this.followInternal(href, source),
-      noteVisited: (note, spread, spreads) => this.noteVisited(note, spread, spreads),
+      noteVisited: (note, spread, spreads, page) => this.noteVisited(note, spread, spreads, page),
       bookmarksChanged: () => this.refreshOutline(),
       shelfRequested: () => void this.showShelf(),
       searchRequested: () => this.search.toggle(),
@@ -250,8 +250,8 @@ export class NotebookApp {
     this.resumed = true;
     const idx = sel.notes.findIndex((n) => n.path === s.lastPosition?.path);
     if (idx < 0) return;
-    const spread = s.lastPosition.spread;
-    window.setTimeout(() => void this.stage.jumpToPage(idx, spread * 2), 400);
+    const page = s.lastPosition.page;
+    window.setTimeout(() => void this.stage.jumpToPage(idx, page), 400);
   }
 
   select(id: string): void {
@@ -510,10 +510,10 @@ export class NotebookApp {
 
   /* ---------------------------------------------- reading progress & recents */
 
-  private noteVisited(note: NoteRef, spread: number, spreads: number): void {
+  private noteVisited(note: NoteRef, spread: number, spreads: number, page: number): void {
     const s = this.host.settings;
     if (s.resumeReading && isNote(note) && this.selectedId) {
-      s.lastPosition = { nb: this.selectedId, path: note.path, spread };
+      s.lastPosition = { nb: this.selectedId, path: note.path, page };
       this.host.saveSettings();
     }
     if (!s.trackProgress || !isNote(note)) return;
@@ -538,7 +538,7 @@ export class NotebookApp {
     const nb = this.stage.currentNotebook();
     if (!nb) return;
     const list = this.host.settings.bookmarks[nb.id] ?? [];
-    this.host.settings.bookmarks[nb.id] = list.filter((x) => !(x.path === b.path && x.spread === b.spread));
+    this.host.settings.bookmarks[nb.id] = list.filter((x) => !(x.path === b.path && bookmarkPage(x) === bookmarkPage(b)));
     this.host.saveSettings();
     this.stage.refreshBookmarks();
   }

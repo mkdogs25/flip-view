@@ -56,7 +56,7 @@ const pageNums = (page) => page.$$eval(".fv-pagebase .fv-page-no", (els) => els.
 
   await link("Thermodynamics").click();
   await wait(1600);
-  assert((await footTitle(page)) === "Thermodynamics", "link to a note in the same notebook flips to it");
+  assert((await footTitle(page)).startsWith("Thermodynamics"), "link to a note in the same notebook flips to it");
 
   // go back to Quantum Mechanics through the contents to click the next links
   await page.click(".fv-ol-row:nth-child(2) .fv-ol-label");
@@ -72,7 +72,7 @@ const pageNums = (page) => page.$$eval(".fv-pagebase .fv-page-no", (els) => els.
   await link("Garden Plan").click();
   await wait(4200);
   assert((await selected(page)) === "Projects", "link to a note in another notebook switches notebook");
-  assert((await footTitle(page)) === "Garden Plan", `...and opens it (${await footTitle(page)})`);
+  assert((await footTitle(page)).startsWith("Garden Plan"), `...and opens it (${await footTitle(page)})`);
 
   // external link -> laptop
   await page.click(".fv-ol-row:nth-child(2) .fv-ol-label");

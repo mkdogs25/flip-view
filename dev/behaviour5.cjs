@@ -53,16 +53,43 @@ const url = (qs) => "file://" + path.join(__dirname, "dist/harness.html") + "?" 
   await wait(700);
   await pk.click(".fv-cover-front");
   await wait(1900);
-  await pk.click(".fv-footer-open button[aria-label='Next page']");
-  await wait(1400);
-  assert((await pk.$$(".fv-pagebase .fv-guest")).length === 1, "two short notes share one spread");
+  const owners = await pk.$$eval(".fv-pagebase .fv-page", (els) => els.map((e) => e.dataset.noteIdx));
+  assert(owners.length === 2 && owners[0] !== owners[1], `the contents page and the first note share a spread (${owners})`);
   assert((await pk.textContent(".fv-foot-title")).includes("·"), "...and the footer names both");
-  await pk.evaluate(() => {
-    window.__settings.packShortNotes = false;
-    window.__app.applySettings();
+  assert(owners.join() === "0,1", "the contents page is followed straight away by the first note");
+  // ink and highlights on the right-hand page belong to the note on that page
+  await pk.click(".fv-w-pen");
+  const rr = await pk.$eval(".fv-pagebase.fv-right", (e) => {
+    const b = e.getBoundingClientRect();
+    return { x: b.left, y: b.top, w: b.width, h: b.height };
   });
-  await wait(1500);
-  assert((await pk.$$(".fv-pagebase .fv-guest")).length === 0, "packing can be switched off");
+  await pk.mouse.move(rr.x + rr.w * 0.2, rr.y + rr.h * 0.8);
+  await pk.mouse.down();
+  await pk.mouse.move(rr.x + rr.w * 0.7, rr.y + rr.h * 0.85, { steps: 6 });
+  await pk.mouse.up();
+  await wait(300);
+  assert((await pk.evaluate(() => Object.keys(window.__settings.annotations))).some((k) => k.includes("Projects/") && !k.includes("index")), "ink on the right page is saved against that page's note");
+  await pk.click(".fv-w-pen");
+  await wait(900); // the book tilts back while the pen is put down
+  await pk.click(".fv-tray .fv-pen:nth-child(1)");
+  const hbox = await pk.evaluate(() => {
+    const pg = document.querySelector(".fv-pagebase.fv-right");
+    const ir = pg.querySelector(".fv-page-inner").getBoundingClientRect();
+    for (const x of pg.querySelectorAll(".fv-flow p, .fv-flow li")) {
+      const a = x.getBoundingClientRect();
+      if (x.textContent.length > 10 && a.left >= ir.left && a.right <= ir.right + 2 && a.top >= ir.top && a.bottom <= ir.bottom) return { x1: a.left + 3, y: a.top + 8, x2: a.left + Math.min(a.width - 3, 140) };
+    }
+    return null;
+  });
+  if (hbox) {
+    await pk.mouse.move(hbox.x1, hbox.y);
+    await pk.mouse.down();
+    await pk.mouse.move(hbox.x2, hbox.y, { steps: 5 });
+    await pk.mouse.up();
+    await wait(400);
+  }
+  assert(Object.keys(await pk.evaluate(() => window.__settings.highlights)).some((k) => k.startsWith("Projects/")), "a highlight on the right page is saved against that page's note");
+  await pk.keyboard.press("Escape");
   // tools side and tilt
   assert((await pk.$eval(".fv-rack", (e) => e.dataset.side)) === "right", "tools start on the right");
   await pk.evaluate(() => {

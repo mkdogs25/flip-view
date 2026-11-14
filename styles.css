@@ -6467,7 +6467,7 @@
 
 /* sub-separators */
 .fv-flow .fv-sep.is-sub .fv-sep-title {
-  font-size: 0.8em;
+  font-size: calc(var(--fv-fs) * 1.55);
   opacity: 0.9;
 }
 
@@ -6478,7 +6478,7 @@
 
 .fv-idx-section.is-sub {
   margin-left: 1.1em;
-  font-size: 0.72em;
+  font-size: 0.8em;
   letter-spacing: 0.08em;
   border-bottom-width: 1px;
   border-bottom-style: dotted;
@@ -6490,4 +6490,11 @@
 
 .fv-ol-row.is-sub .fv-ol-label {
   font-size: 0.92em;
+}
+
+/* a separator is a single page now, so its tab can be on either side of the spread */
+.fv-sep-tab.is-left {
+  right: auto;
+  left: -1px;
+  border-radius: 8px 0 0 8px;
 }

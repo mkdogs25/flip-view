@@ -114,10 +114,6 @@ export class FlipViewSettingTab extends PluginSettingTab {
           .onChange((v) => ((s.toolsSide = v as "left" | "right"), save())),
       );
     new Setting(containerEl)
-      .setName("Put short notes together")
-      .setDesc("Two one-page notes in a row share a spread, instead of each leaving a blank page beside it. The second note's page is read-only for ink and highlights; open the note on its own to mark it up.")
-      .addToggle((t) => t.setValue(s.packShortNotes).onChange((v) => ((s.packShortNotes = v), save())));
-    new Setting(containerEl)
       .setName("Light pages in dark mode")
       .setDesc("Keep the paper light (with dark ink) even when the app is dark.")
       .addToggle((t) => t.setValue(s.lightPagesInDark).onChange((v) => ((s.lightPagesInDark = v), save())));

@@ -58,13 +58,13 @@ const url = (qs) => "file://" + path.join(__dirname, "dist/harness.html") + "?sc
   await page.keyboard.press("Enter");
   await wait(4500);
   assert((await page.$eval(".fv-sc.is-away", (e) => e.dataset.id)) === "folder:Physics", "search jumps into the right notebook");
-  assert((await page.textContent(".fv-foot-title")) === "Thermodynamics", "...at the right note");
+  assert((await page.textContent(".fv-foot-title")).startsWith("Thermodynamics"), "...at the right note");
 
   // tabs: Physics has a separator in the harness (seps=1)
   assert((await page.$$(".fv-tab")).length >= 2, "index tabs appear on the book when there are sections");
   await page.click(".fv-tab >> nth=1");
   await wait(1700);
-  assert((await page.textContent(".fv-foot-title")) === "Part Two: Heat", "clicking a tab jumps to that section");
+  assert((await page.textContent(".fv-foot-title")).startsWith("Part Two: Heat"), "clicking a tab jumps to that section");
 
   // drawers
   await page.click(".fv-btn-more");

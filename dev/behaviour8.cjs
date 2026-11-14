@@ -22,7 +22,7 @@ const assert = (c, m) => {
   assert((await page.$$(".fv-tab")).length === 2, "only chapters get edge tabs");
   await page.click(".fv-ol-row.is-sub .fv-ol-label");
   await wait(1700);
-  assert((await page.textContent(".fv-foot-title")) === "Laws of Heat", "it opens as its own divider page");
+  assert((await page.textContent(".fv-foot-title")).startsWith("Laws of Heat"), "it opens as its own divider page");
   assert((await page.$$(".fv-sep-tab")).length === 0, "...without an edge tab");
   await page.hover(".fv-ol-row.is-sub");
   await page.click(".fv-ol-row.is-sub button[aria-label='Delete separator']");

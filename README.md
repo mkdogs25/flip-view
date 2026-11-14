@@ -25,7 +25,7 @@ in 3D; turn pages to read your notes either as **handwriting** or as **formatted
 - **Quick keys:** F frameless, T handwritten/text, B bookmark this page, Home/End first/last note, / search.
 - **Warm page tint** for night reading (settings).
 - **Tilt the notebook** to your liking with the slider in the "..." menu or settings (0 = flat towards you).
-- **Short notes share a spread:** two one-page notes in a row sit side by side instead of each leaving a blank page (switch off in settings). Ink and highlights on the second note's page are made when you open that note on its own.
+- **No blank pages:** the book is one continuous run of pages. The contents, separators and notes follow each other page by page, so a short note or the end of a long one shares its spread with whatever comes next (the footer names both). Ink, highlights, links and margin notes belong to the note on the page you use them on.
 - **Maths:** equations render through Obsidian in text view, and handwritten view understands fractions, roots, matrices, cases, `align`, `\text{...}`, binomials, big operators and many more symbols.
 - **Edit a note's text** from the pencil button in the navigation bar, in either view. Front matter is left alone; Save (or Ctrl/Cmd+Enter) writes it back to the note.
 - **Shelf mode:** see every notebook as a spine on a wall shelf (wall and shelf colours follow light/dark). Click one and it slides out, swings round to show its cover, and lies down on the desk. Spine designs, covers and progress show on the spines.
