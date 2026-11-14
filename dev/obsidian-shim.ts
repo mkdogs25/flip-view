@@ -10,6 +10,7 @@ function apply(el: HTMLElement, o?: Info): void {
   }
   if (o.cls) el.className = Array.isArray(o.cls) ? o.cls.join(" ") : o.cls;
   if (o.text !== undefined) el.textContent = o.text;
+  if ((o as { value?: string }).value !== undefined) (el as HTMLInputElement).value = (o as { value?: string }).value as string;
   if (o.attr) for (const [k, v] of Object.entries(o.attr)) if (v !== null && v !== false) el.setAttribute(k, String(v));
 }
 
@@ -53,6 +54,12 @@ P.setAttr = function (k: string, v: string) {
   return d;
 };
 
+(window as any).createSpan = (o?: Info) => {
+  const d = document.createElement("span");
+  apply(d, o);
+  return d;
+};
+
 const ICON_PATHS: Record<string, string> = {
   library: "M4 3v18M9 3v18M14 5l5 15",
   search: "M11 4a7 7 0 100 14 7 7 0 000-14zM21 21l-5-5",
@@ -69,8 +76,30 @@ const ICON_PATHS: Record<string, string> = {
   "chevron-left": "M15 5l-7 7 7 7",
   "chevron-right": "M9 5l7 7-7 7",
   "file-text": "M6 3h8l4 4v14H6zM9 12h6M9 16h6",
+  palette: "M12 3a9 9 0 100 18c1.5 0 2-1 1.5-2s0-2 1.5-2h2a3 3 0 003-3c0-5-4-11-8-11z",
+  "panel-right": "M4 4h16v16H4zM15 4v16",
+  "grip-vertical": "M9 5v.1M9 12v.1M9 19v.1M15 5v.1M15 12v.1M15 19v.1",
+  bookmark: "M6 3h12v18l-6-4-6 4z",
+  "bookmark-plus": "M6 3h12v18l-6-4-6 4zM12 7v6M9 10h6",
+  "trash-2": "M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13",
+  "chevron-up": "M5 15l7-7 7 7",
+  "chevron-down": "M5 9l7 7 7-7",
+  "refresh-cw": "M20 11a8 8 0 10-2.3 6M20 4v7h-7",
+  "external-link": "M14 4h6v6M20 4l-9 9M18 14v6H4V6h6",
+  "library-big": "M5 3h4v18H5zM11 3h4v18h-4zM17 5l3 1-4 15-3-1z",
+  "notebook-text": "M6 3h12v18H6zM9 8h6M9 12h6",
+  list: "M8 6h13M8 12h13M8 18h13M3 6h.1M3 12h.1M3 18h.1",
+  "layout-grid": "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
+  "chevron-up": "M5 15l7-7 7 7",
+  calendar: "M5 5h14v15H5zM5 10h14M9 3v4M15 3v4",
+  "bar-chart-3": "M5 20V10M12 20V4M19 20v-8",
+  hash: "M5 9h14M5 15h14M10 4L8 20M16 4l-2 16",
+  "book-open": "M3 5c3-1 6-1 9 1 3-2 6-2 9-1v14c-3-1-6-1-9 1-3-2-6-2-9-1z",
+  ellipsis: "M5 12h.1M12 12h.1M19 12h.1",
   clock: "M12 3a9 9 0 100 18 9 9 0 000-18zM12 7v5l3 2",
 };
+
+export const Platform = { isDesktopApp: false };
 
 export function setIcon(el: HTMLElement, name: string): void {
   const d = ICON_PATHS[name] ?? "M4 4h16v16H4z";

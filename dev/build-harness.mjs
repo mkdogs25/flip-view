@@ -7,7 +7,7 @@ await esbuild.build({
   bundle: true,
   outfile: "dev/dist/harness.js",
   alias: { obsidian: "./dev/obsidian-shim.ts" },
-  loader: { ".woff2": "dataurl", ".jpg": "dataurl", ".png": "dataurl" },
+  loader: { ".woff2": "dataurl", ".jpg": "dataurl", ".png": "dataurl", ".webp": "dataurl" },
   target: "es2020",
   format: "iife",
   logLevel: "info",

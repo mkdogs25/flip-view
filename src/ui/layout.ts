@@ -1,5 +1,8 @@
-import { NotebookHost, NoteRef } from "../types";
+import { applyHighlight, highlightColor, removeHighlightEls } from "../render/highlights";
 import { handwrite, prepareForPages } from "../render/handwriting";
+import { formatDateAs, NoteStatus } from "../progress";
+import { Annotation, FlipViewSettings, NotebookHost, Notebook, NoteRef, isIndex, isSeparator } from "../types";
+import { ensureInkLayer, renderInk } from "./ink";
 
 export interface LayoutConfig {
   mode: "handwritten" | "text";
@@ -8,8 +11,50 @@ export interface LayoutConfig {
   h: number;
   gap: number;
   messiness: number;
+  /** 0..1, how much words may drift off the baseline (ruled paper keeps them on the line). */
+  tame: number;
+  /** 0..1, how much line spacing wanders (handwriting on plain paper only). */
+  lineVar: number;
+  /** Pull `[!margin]` callouts and highlight notes out into the page margin. */
+  margin: boolean;
   /** Anything that should invalidate cached layouts when it changes. */
   signature: string;
+}
+
+export interface Heading {
+  text: string;
+  level: number;
+  page: number;
+}
+
+export interface MarginNote {
+  page: number;
+  /** Distance from the top of the page's text area, px. */
+  y: number;
+  text: string;
+  hlId?: string;
+}
+
+export interface IndexData {
+  nb: Notebook;
+  /** First folio of each item (null for separators and the index itself). */
+  folios: Array<{ folio: number; exact: boolean } | null>;
+  status(path: string): NoteStatus;
+  bookmarked(path: string): boolean;
+  /** Changes whenever anything the index shows changes. */
+  signature: string;
+}
+
+export interface PageOpts {
+  folio?: number;
+  annots?: Annotation[];
+  /** Running head shown on realistic page layouts. */
+  head?: string;
+}
+
+export interface EngineHooks {
+  measured(note: NoteRef, pages: number): void;
+  index(): IndexData | null;
 }
 
 export class NoteLayout {
@@ -19,23 +64,78 @@ export class NoteLayout {
     readonly pageCount: number,
     private step: number,
     private disposeFn: () => void,
+    readonly headings: Heading[],
+    readonly hlPages: Map<string, number>,
+    readonly margins: MarginNote[] = [],
   ) {}
 
   get spreads(): number {
     return Math.max(1, Math.ceil(this.pageCount / 2));
   }
 
+  get separator(): boolean {
+    return isSeparator(this.note);
+  }
+
+  get index(): boolean {
+    return isIndex(this.note);
+  }
+
   /** Builds a page element showing column `index` of the flowed note (blank past the end). */
-  pageEl(index: number, side: "left" | "right"): HTMLElement {
+  pageEl(index: number, side: "left" | "right", opts: PageOpts = {}): HTMLElement {
     const page = createDiv({ cls: `fv-page fv-page-${side}` });
+    page.dataset.index = String(index);
     const inner = page.createDiv({ cls: "fv-page-inner" });
     if (index < this.pageCount) {
       const clone = this.flow.cloneNode(true) as HTMLElement;
       clone.style.transform = `translateX(${-index * this.step}px)`;
+      clone.dataset.page = String(index);
+      clone.dataset.note = this.note.path;
       inner.appendChild(clone);
-      page.createDiv({ cls: "fv-page-no", text: String(index + 1) });
+      if (!this.separator && !this.index) {
+        const no = page.createDiv({ cls: "fv-page-no", text: String(opts.folio ?? index + 1) });
+        no.dataset.index = String(index);
+        if (opts.head) page.createDiv({ cls: "fv-page-head", text: opts.head });
+      }
+    }
+    this.renderMargins(page, index);
+    if (opts.annots) renderInk(page, opts.annots.filter((a) => a.page === index));
+    else ensureInkLayer(page);
+    if (this.separator && this.note.sepLevel !== 2) {
+      const tab = page.createDiv({ cls: side === "left" ? "fv-sep-tab is-left" : "fv-sep-tab" });
+      tab.createSpan({ text: this.note.title });
     }
     return page;
+  }
+
+  /** Margin notes for one page. They sit in the outer margin, nudged apart so they don't overlap. */
+  renderMargins(page: HTMLElement, index: number): void {
+    page.querySelectorAll(":scope > .fv-margin-note").forEach((n) => n.remove());
+    let floor = 0;
+    for (const m of this.margins.filter((x) => x.page === index).sort((a, b) => a.y - b.y)) {
+      const note = page.createDiv({ cls: "fv-margin-note", text: m.text });
+      const y = Math.max(m.y, floor);
+      note.style.top = `calc(var(--fv-pt) + ${y}px)`;
+      if (m.hlId) note.dataset.hl = m.hlId;
+      floor = y + (Math.ceil(m.text.length / 15) + 1) * 19;
+    }
+  }
+
+  addHighlight(h: Parameters<typeof applyHighlight>[1], color: string, page: number, y?: number): void {
+    applyHighlight(this.flow, h, color);
+    this.hlPages.set(h.id, page);
+    if (h.note && y !== undefined) this.margins.push({ page, y, text: h.note, hlId: h.id });
+  }
+
+  recolorHighlight(id: string, color: string): void {
+    this.flow.querySelectorAll<HTMLElement>(`.fv-hl[data-hl="${id}"]`).forEach((el) => el.style.setProperty("--hl", color));
+  }
+
+  removeHighlight(id: string): void {
+    removeHighlightEls(this.flow, id);
+    this.hlPages.delete(id);
+    const i = this.margins.findIndex((m) => m.hlId === id);
+    if (i >= 0) this.margins.splice(i, 1);
   }
 
   dispose(): void {
@@ -63,14 +163,38 @@ async function waitForImages(root: HTMLElement, timeout = 2500): Promise<void> {
   ]);
 }
 
+/** The number of columns that actually hold text or media (0 if nothing could be measured). */
+function lastContentPage(flow: HTMLElement, left: number, step: number): number {
+  let last = -1;
+  const note = (r: DOMRect): void => {
+    if (r.width < 1 || r.height < 1) return;
+    last = Math.max(last, Math.floor((r.left - left + 2) / step));
+  };
+  const walker = document.createTreeWalker(flow, NodeFilter.SHOW_TEXT);
+  const range = document.createRange();
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (!(n.nodeValue ?? "").trim()) continue;
+    const el = n.parentElement;
+    if (el && (el.closest(".fv-margin-anchor") || getComputedStyle(el).visibility === "hidden")) continue;
+    range.selectNodeContents(n);
+    for (const r of Array.from(range.getClientRects())) note(r);
+  }
+  flow.querySelectorAll("img, svg, canvas, video, iframe, hr, table, pre, .fv-hmath-block, mjx-container, .math").forEach((el) => {
+    if (el.closest("svg") && el.tagName !== "svg") return;
+    for (const r of Array.from(el.getClientRects())) note(r);
+  });
+  return last + 1;
+}
+
 /** Renders notes into a hidden measuring box, splits them into page-sized CSS columns and caches the result. */
 export class LayoutEngine {
   private cache = new Map<string, Entry>();
 
-  constructor(private host: NotebookHost, private measureEl: HTMLElement) {}
+  constructor(private host: NotebookHost, private measureEl: HTMLElement, private hooks: EngineHooks) {}
 
   get(note: NoteRef, cfg: LayoutConfig): Promise<NoteLayout> {
-    const sig = `${cfg.mode}|${cfg.w}x${cfg.h}|${cfg.gap}|${cfg.messiness}|${cfg.signature}`;
+    const extra = isIndex(note) ? (this.hooks.index()?.signature ?? "") : "";
+    const sig = `${cfg.mode}|${cfg.w}x${cfg.h}|${cfg.gap}|${cfg.messiness}|${cfg.tame}|${cfg.lineVar}|${cfg.margin}|${cfg.signature}|${extra}`;
     const hit = this.cache.get(note.path);
     if (hit && hit.sig === sig && hit.mtime === note.mtime) {
       // refresh LRU position
@@ -109,9 +233,39 @@ export class LayoutEngine {
     flow.style.columnGap = `${cfg.gap}px`;
     this.measureEl.appendChild(flow);
 
-    const dispose = await this.host.renderNote(note, flow);
-    if (cfg.mode === "handwritten") handwrite(flow, note.path, cfg.messiness / 100);
+    let dispose: () => void = () => undefined;
+    const margins: MarginNote[] = [];
+    if (isIndex(note)) {
+      flow.addClass("fv-flow-index");
+      const data = this.hooks.index();
+      if (data) buildIndexFlow(flow, data, this.host.settings);
+    } else if (isSeparator(note)) {
+      flow.addClass("fv-flow-sep");
+      const sep = flow.createDiv({ cls: note.sepLevel === 2 ? "fv-sep is-sub" : "fv-sep" });
+      sep.createEl("h1", { cls: "fv-sep-title", text: note.title });
+      sep.createDiv({ cls: "fv-sep-flourish" });
+    } else {
+      dispose = await this.host.renderNote(note, flow, { hand: cfg.mode === "handwritten" });
+    }
+    // [!margin] / [!aside] callouts leave the text and become margin notes
+    const callouts: string[] = [];
+    if (cfg.margin && !isIndex(note) && !isSeparator(note)) {
+      flow.querySelectorAll<HTMLElement>('.callout[data-callout="margin"], .callout[data-callout="aside"]').forEach((c) => {
+        const content = c.querySelector(".callout-content") ?? c;
+        const text = (content.textContent ?? "").trim();
+        const anchor = document.createElement("span");
+        anchor.className = "fv-margin-anchor";
+        anchor.dataset.m = String(callouts.length);
+        callouts.push(text);
+        c.replaceWith(anchor);
+      });
+    }
+    if (cfg.mode === "handwritten") handwrite(flow, note.path, cfg.messiness / 100, cfg.tame, cfg.lineVar);
     prepareForPages(flow);
+
+    // saved highlights
+    const s = this.host.settings;
+    for (const h of s.highlights[note.path] ?? []) applyHighlight(flow, h, highlightColor(h, s.highlighters));
 
     try {
       await document.fonts.load(`20px ${getComputedStyle(flow).fontFamily.split(",")[0]}`);
@@ -123,8 +277,69 @@ export class LayoutEngine {
     await sleep(30); // let late post-processors (embeds, math) settle
 
     const step = cfg.w + cfg.gap;
-    const pages = Math.max(1, Math.round((flow.scrollWidth + cfg.gap) / step));
+    const left = flow.getBoundingClientRect().left;
+    const measured = Math.max(1, Math.round((flow.scrollWidth + cfg.gap) / step));
+    // trust the last bit of real content over scrollWidth, which also counts margins and hidden overflow
+    const used = lastContentPage(flow, left, step);
+    const pages = used > 0 ? Math.min(measured, used) : measured;
+    const pageOf = (el: Element): number => {
+      const r = el.getClientRects()[0];
+      return r ? Math.max(0, Math.floor((r.left - left + 2) / step)) : 0;
+    };
+    const headings: Heading[] = Array.from(flow.querySelectorAll("h1, h2, h3, h4, h5, h6")).map((h) => ({
+      text: (h.textContent ?? "").trim(),
+      level: Number(h.tagName[1]),
+      page: pageOf(h),
+    }));
+    const hlPages = new Map<string, number>();
+    const top = flow.getBoundingClientRect().top;
+    const yOf = (el: Element): number => (el.getClientRects()[0]?.top ?? top) - top;
+    flow.querySelectorAll<HTMLElement>(".fv-hl").forEach((el) => {
+      const id = el.dataset.hl;
+      if (id && !hlPages.has(id)) {
+        hlPages.set(id, pageOf(el));
+        const h = (s.highlights[note.path] ?? []).find((x) => x.id === id);
+        if (cfg.margin && h?.note) margins.push({ page: pageOf(el), y: yOf(el), text: h.note, hlId: id });
+      }
+    });
+    flow.querySelectorAll<HTMLElement>(".fv-margin-anchor").forEach((el) => {
+      margins.push({ page: pageOf(el), y: yOf(el), text: callouts[Number(el.dataset.m)] ?? "" });
+    });
     flow.remove();
-    return new NoteLayout(note, flow, pages, step, dispose);
+    this.hooks.measured(note, pages);
+    return new NoteLayout(note, flow, pages, step, dispose, headings.filter((h) => h.text), hlPages, margins);
   }
+}
+
+
+/** The contents page: section headings and clickable note rows with dates, status and page numbers. */
+function buildIndexFlow(flow: HTMLElement, data: IndexData, s: FlipViewSettings): void {
+  const wrap = flow.createDiv({ cls: "fv-index" });
+  wrap.createEl("h1", { cls: "fv-index-title", text: s.indexTitle.trim() || "Contents" });
+  const count = data.nb.notes.filter((n) => n.kind !== "separator" && n.kind !== "index").length;
+  wrap.createDiv({ cls: "fv-index-sub", text: `${data.nb.name} · ${count} ${count === 1 ? "note" : "notes"}` });
+  data.nb.notes.forEach((n, i) => {
+    if (n.kind === "index") return;
+    if (n.kind === "separator") {
+      if (!s.indexSections) return;
+      const sec = wrap.createDiv({ cls: n.sepLevel === 2 ? "fv-idx-section is-sub" : "fv-idx-section", attr: { "data-idx": String(i), role: "link" } });
+      sec.createSpan({ text: n.title });
+      return;
+    }
+    const row = wrap.createDiv({ cls: "fv-idx-row", attr: { "data-idx": String(i), role: "link" } });
+    const head = row.createDiv({ cls: "fv-idx-head" });
+    if (s.indexStatus) {
+      const st = data.status(n.path);
+      head.createSpan({ cls: `fv-idx-status is-${st}`, text: st === "finished" ? "✓" : st === "opened" ? "●" : "○" });
+    }
+    if (s.indexBookmarks && data.bookmarked(n.path)) head.createSpan({ cls: "fv-idx-star", text: "★" });
+    head.createSpan({ cls: "fv-idx-title", text: n.title });
+    if (s.indexLeader !== "none") row.createSpan({ cls: `fv-idx-lead is-${s.indexLeader}` });
+    if (s.indexCreated && n.ctime) row.createSpan({ cls: "fv-idx-date", text: `+${formatDateAs(n.ctime, s.indexDates)}` });
+    if (s.indexLastEdited) row.createSpan({ cls: "fv-idx-date", text: formatDateAs(n.mtime, s.indexDates) });
+    if (s.indexPageNumbers) {
+      const f = data.folios[i];
+      row.createSpan({ cls: "fv-idx-page", text: f ? `${f.exact ? "" : "~"}${f.folio}` : "" });
+    }
+  });
 }
