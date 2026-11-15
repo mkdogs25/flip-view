@@ -209,6 +209,8 @@ export interface FlipViewSettings {
   shelfHidden: boolean;
   /** Which side of the desk the pens, highlighters and tools sit on. */
   toolsSide: "left" | "right";
+  /** Extra decoration for handwritten pages: washi tape, doodles, marker headings. */
+  handFlair: "none" | "subtle" | "journal";
   /** Warm, sepia tint on the pages for night reading (0 = off). */
   pageWarmth: number;
   /** Keep the pages light even when the app is in dark mode. */
@@ -343,6 +345,7 @@ export const DEFAULT_SETTINGS: FlipViewSettings = {
   stripCollapsed: false,
   shelfHidden: false,
   toolsSide: "right",
+  handFlair: "journal",
   pageWarmth: 0,
   lightPagesInDark: false,
   marginTop: 100,

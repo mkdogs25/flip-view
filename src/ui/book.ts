@@ -590,6 +590,7 @@ export class BookStage {
     this.el.toggleClass("fv-margins", s.marginNotes);
     this.el.setAttr("data-tools", s.toolsSide);
     this.el.toggleClass("fv-lightpages", s.lightPagesInDark);
+    for (const f of ["none", "subtle", "journal"]) this.el.toggleClass(`fv-flair-${f}`, s.handFlair === f);
     this.sfx.ambient(s.ambientRain);
     this.el.style.setProperty("--fv-warm", String(clamp(s.pageWarmth, 0, 100) / 100));
     this.el.toggleClass("fv-warm-on", s.pageWarmth > 0);

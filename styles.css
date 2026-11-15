@@ -6498,3 +6498,137 @@
   left: -1px;
   border-radius: 8px 0 0 8px;
 }
+
+/* ===================================================================== */
+/* Handwriting flair: ink, marker headings, doodle bullets, washi tape    */
+/* ===================================================================== */
+
+.fv-tape,
+.fv-doodle {
+  display: none;
+}
+
+/* ink that has soaked into the paper a little (subtle and journal) */
+.fv-mode-hand:not(.fv-flair-none) .fv-flow .fv-w {
+  text-shadow: 0 0 0.7px color-mix(in srgb, currentColor 55%, transparent), 0.25px 0.35px 0.5px color-mix(in srgb, currentColor 22%, transparent);
+}
+
+/* headings: h1 gets a pastel marker swash, h2 a wavy line, h3 a dotted one */
+.fv-mode-hand:not(.fv-flair-none) .fv-flow h1::after,
+.fv-mode-hand:not(.fv-flair-none) .fv-flow h2::after {
+  display: none;
+}
+
+.fv-mode-hand:not(.fv-flair-none) .fv-flow h1 .fv-w {
+  background: linear-gradient(176deg, transparent 52%, color-mix(in srgb, var(--fv-accent) 26%, transparent) 52% 90%, transparent 90%);
+  border-radius: 3px 8px 4px 9px / 5px 7px 4px 8px;
+  padding: 0 0.14em;
+  margin: 0 -0.08em;
+}
+
+.fv-mode-hand:not(.fv-flair-none) .fv-flow h2 {
+  text-decoration: underline wavy color-mix(in srgb, var(--fv-accent) 60%, transparent);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.22em;
+  text-decoration-skip-ink: none;
+}
+
+.fv-mode-hand:not(.fv-flair-none) .fv-flow :is(h3, h4, h5, h6) {
+  text-decoration: underline dotted color-mix(in srgb, var(--fv-accent) 70%, transparent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.2em;
+}
+
+/* journal only */
+.fv-mode-hand.fv-flair-journal .fv-flow ul > li:nth-child(3n + 1)::marker {
+  content: "\273f  ";
+}
+
+.fv-mode-hand.fv-flair-journal .fv-flow ul > li:nth-child(3n + 2)::marker {
+  content: "\2606  ";
+}
+
+.fv-mode-hand.fv-flair-journal .fv-flow ul > li:nth-child(3n)::marker {
+  content: "\2661  ";
+}
+
+.fv-mode-hand.fv-flair-journal .fv-flow ul ul > li::marker {
+  content: "\00b7  ";
+}
+
+.fv-mode-hand.fv-flair-journal .fv-flow blockquote {
+  padding: 0.35em 0.7em 0.35em 1.1em;
+  background: color-mix(in srgb, var(--fv-accent) 8%, transparent);
+  border-radius: 3px 6px 4px 7px;
+}
+
+.fv-mode-hand.fv-flair-journal .fv-flow blockquote::before {
+  border-left-style: dashed;
+  border-left-width: 2px;
+}
+
+.fv-mode-hand.fv-flair-journal .fv-flow blockquote::after {
+  content: "";
+  position: absolute;
+  top: -0.5em;
+  right: 0.8em;
+  width: 3.4em;
+  height: 1em;
+  transform: rotate(4deg);
+  background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.35) 0 4px, transparent 4px 8px), color-mix(in srgb, var(--fv-accent) 42%, #fff);
+  opacity: 0.8;
+  clip-path: polygon(0 12%, 6% 0, 12% 12%, 18% 0, 24% 12%, 100% 12%, 100% 88%, 94% 100%, 88% 88%, 82% 100%, 76% 88%, 0 88%);
+}
+
+.fv-mode-hand.fv-flair-journal .fv-tape {
+  display: block;
+  position: absolute;
+  top: 12px;
+  width: 96px;
+  height: 24px;
+  z-index: 2;
+  pointer-events: none;
+  background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.4) 0 5px, transparent 5px 10px), var(--tape, #f6b8c8);
+  opacity: 0.92;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  clip-path: polygon(0 0, 100% 0, 97% 25%, 100% 50%, 97% 75%, 100% 100%, 0 100%, 3% 75%, 0 50%, 3% 25%);
+  mix-blend-mode: multiply;
+}
+
+.fv-mode-hand.fv-flair-journal .fv-page-left .fv-tape {
+  left: -26px;
+  transform: rotate(calc(-38deg + var(--tape-r, 0deg)));
+}
+
+.fv-mode-hand.fv-flair-journal .fv-page-right .fv-tape {
+  right: -26px;
+  transform: rotate(calc(38deg + var(--tape-r, 0deg)));
+}
+
+.fv-mode-hand.fv-flair-journal .fv-tape-1 {
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.55) 1.6px, transparent 2px) 0 0 / 10px 10px, var(--tape, #f6b8c8);
+}
+
+.fv-mode-hand.fv-flair-journal .fv-tape-2 {
+  background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.5) 0 3px, transparent 3px 9px), var(--tape, #f6b8c8);
+}
+
+.fv-mode-hand.fv-flair-journal .fv-doodle {
+  display: block;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--fv-pb) * 0.74);
+  text-align: center;
+  font-family: var(--fv-hand-font);
+  font-size: calc(11px * var(--fv-s));
+  letter-spacing: 0.25em;
+  color: var(--fv-accent-text);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.fv-root.fv-dark .fv-stage:not(.fv-lightpages).fv-flair-journal .fv-tape {
+  mix-blend-mode: normal;
+  opacity: 0.55;
+}

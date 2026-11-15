@@ -98,6 +98,15 @@ export class NoteLayout {
         if (opts.head) page.createDiv({ cls: "fv-page-head", text: opts.head });
       }
     }
+    if (index < this.pageCount && !this.separator && !this.index) {
+      // washi tape on the outer corner and a little doodle above the page number (shown by the "journal" flair)
+      const tape = page.createDiv({ cls: "fv-tape" });
+      const k = (index * 3 + this.note.path.length) % TAPES.length;
+      tape.style.setProperty("--tape", TAPES[k]);
+      tape.style.setProperty("--tape-r", `${((k * 7) % 9) - 4}deg`);
+      tape.classList.add(`fv-tape-${k % 3}`);
+      page.createDiv({ cls: "fv-doodle", text: DOODLES[(index + this.note.path.length) % DOODLES.length] });
+    }
     this.renderMargins(page, index);
     if (opts.annots) renderInk(page, opts.annots.filter((a) => a.page === index));
     else ensureInkLayer(page);
@@ -162,6 +171,9 @@ async function waitForImages(root: HTMLElement, timeout = 2500): Promise<void> {
     sleep(timeout),
   ]);
 }
+
+const TAPES = ["#f6b8c8", "#b9e3d1", "#c9c3f2", "#f9dd9a", "#aed6f1"];
+const DOODLES = ["\u273f \u00b7 \u2726 \u00b7 \u273f", "\u2606 \u00b7 \u2661 \u00b7 \u2606", "\u2726 \u00b7\u00b7\u00b7 \u2726", "\u2740 \u00b7 \u2736 \u00b7 \u2740"];
 
 /** The number of columns that actually hold text or media (0 if nothing could be measured). */
 function lastContentPage(flow: HTMLElement, left: number, step: number): number {

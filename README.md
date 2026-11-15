@@ -39,6 +39,7 @@ in 3D; turn pages to read your notes either as **handwriting** or as **formatted
 - **More ways to customise the physical book:** illustrated storybook covers plus 17 other cover materials, cover colour, spine designs, elastic straps (vertical, horizontal, cross), ribbon colour, paper colours, page textures, per-notebook overrides. None of it touches your notes.
 - **20 handwriting fonts** including several cursive scripts.
 - **Outline panel** on the right: reorder notes by dragging, add **separator pages** between notes, add smaller **sub-separators** under them (the corner-arrow button; they show indented in the contents and outline, without their own edge tab), jump to headings and highlights.
+- **Handwriting flair:** washi tape on the page corners, doodle bullets (flowers, stars, hearts), marker-pen and wavy-underlined headings, taped quotes, little doodles above the page number, and ink that soaks into the paper a touch. Choose Journal, Subtle or Plain in settings.
 - **Handwriting extras:** cursive fonts, small-caps handwritten headings (configurable), maths and code written out by hand, and on ruled/grid/dotted paper words sit on the line.
 - **Highlighters** on the desk (any number, any colour) with a draggable sticky-note **legend**. Highlights are saved per note.
 - **Links work inside the book:** a link to a note flips to it (or moves to that note's notebook); a web link opens on a laptop on the desk while the notebook slides aside. Ctrl/Cmd-click opens the real note or your browser instead.

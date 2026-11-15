@@ -139,6 +139,17 @@ export class FlipViewSettingTab extends PluginSettingTab {
       .setDesc("A gentle sepia glow on the pages for night reading. 0 is off.")
       .addSlider((sl) => sl.setLimits(0, 100, 5).setValue(s.pageWarmth).setDynamicTooltip().onChange((v) => ((s.pageWarmth = v), save())));
     new Setting(containerEl)
+      .setName("Handwriting flair")
+      .setDesc("Journal adds washi tape, doodle bullets, marker-pen headings and taped quotes. Subtle only softens the ink and underlines headings. Plain turns it all off.")
+      .addDropdown((d) =>
+        d
+          .addOption("journal", "Journal (washi tape and doodles)")
+          .addOption("subtle", "Subtle (ink and headings only)")
+          .addOption("none", "Plain")
+          .setValue(s.handFlair)
+          .onChange((v) => ((s.handFlair = v as "none" | "subtle" | "journal"), save())),
+      );
+    new Setting(containerEl)
       .setName("Rain in the background")
       .setDesc("A soft rain loop while you read (sound effects must be on).")
       .addToggle((t) => t.setValue(s.ambientRain).onChange((v) => ((s.ambientRain = v), save())));
