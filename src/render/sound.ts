@@ -10,6 +10,46 @@ type AudioCtor = typeof AudioContext;
 export class Sfx {
   private ctx: AudioContext | null = null;
   private noise: AudioBuffer | null = null;
+  private amb: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
+
+  /** Starts or stops the soft rain loop. Safe to call again whenever the settings change. */
+  ambient(on: boolean): void {
+    if (!on) {
+      if (this.amb) {
+        try {
+          this.amb.src.stop();
+        } catch {
+          /* already stopped */
+        }
+        this.amb.src.disconnect();
+        this.amb.gain.disconnect();
+        this.amb = null;
+      }
+      return;
+    }
+    const r = this.ready();
+    if (!r) return;
+    const level = r.vol * 0.16;
+    if (this.amb) {
+      this.amb.gain.gain.value = level;
+      return;
+    }
+    const { ctx } = r;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noiseBuffer(ctx);
+    src.loop = true;
+    const hp = ctx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 500;
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 5200;
+    const gain = ctx.createGain();
+    gain.gain.value = level;
+    src.connect(hp).connect(lp).connect(gain).connect(ctx.destination);
+    src.start();
+    this.amb = { src, gain };
+  }
 
   constructor(private get: () => SoundSettings) {}
 

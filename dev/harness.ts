@@ -167,7 +167,7 @@ const host: NotebookHost = {
     });
     return () => undefined;
   },
-  promptText: async (o) => (o.value ? o.value + " (renamed)" : "New Chapter"),
+  promptText: async (o) => (window as unknown as { __prompt?: string }).__prompt ?? (o.value ? o.value + " (renamed)" : "New Chapter"),
   customiseCover: async () => undefined,
   resolveLink: (href) => {
     const [name, heading] = href.split("#");

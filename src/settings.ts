@@ -139,6 +139,10 @@ export class FlipViewSettingTab extends PluginSettingTab {
       .setDesc("A gentle sepia glow on the pages for night reading. 0 is off.")
       .addSlider((sl) => sl.setLimits(0, 100, 5).setValue(s.pageWarmth).setDynamicTooltip().onChange((v) => ((s.pageWarmth = v), save())));
     new Setting(containerEl)
+      .setName("Rain in the background")
+      .setDesc("A soft rain loop while you read (sound effects must be on).")
+      .addToggle((t) => t.setValue(s.ambientRain).onChange((v) => ((s.ambientRain = v), save())));
+    new Setting(containerEl)
       .setName("Notebook tilt")
       .setDesc("How far the notebook leans back on the desk. 0 lies it flat towards you; higher looks more like it is seen from an angle.")
       .addSlider((sl) => sl.setLimits(0, 45, 1).setValue(s.bookTilt).setDynamicTooltip().onChange((v) => ((s.bookTilt = v), save())));

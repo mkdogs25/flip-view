@@ -286,6 +286,19 @@ export class BookStage {
       },
       true,
     );
+    // swiping across the open book turns the page (touch screens)
+    let swipe: { x: number; y: number; t: number } | null = null;
+    this.book.addEventListener("pointerdown", (e) => {
+      swipe = e.pointerType === "touch" && this.writeTool === null && this.activePen === null ? { x: e.clientX, y: e.clientY, t: Date.now() } : null;
+    });
+    this.book.addEventListener("pointerup", (e) => {
+      const s0 = swipe;
+      swipe = null;
+      if (!s0 || !this.isOpen || this.busy || window.getSelection()?.isCollapsed === false) return;
+      const dx = e.clientX - s0.x;
+      const dy = e.clientY - s0.y;
+      if (Math.abs(dx) > 70 && Math.abs(dy) < 60 && Date.now() - s0.t < 700) void (dx < 0 ? this.next() : this.prev());
+    });
     this.book.addEventListener(
       "wheel",
       (e) => {
@@ -521,6 +534,17 @@ export class BookStage {
       case "F":
         this.cb.toggleFrameless();
         return true;
+      case "g":
+      case "G":
+        if (!this.isOpen) return false;
+        void this.goToPageNumber();
+        return true;
+      case "+":
+      case "=":
+      case "-":
+      case "_":
+        this.nudgeTextSize(e.key === "+" || e.key === "=" ? 5 : -5);
+        return true;
       case "t":
       case "T":
         void this.setMode(this.host.settings.viewMode === "text" ? "handwritten" : "text");
@@ -564,6 +588,7 @@ export class BookStage {
     this.el.toggleClass("fv-margins", s.marginNotes);
     this.el.setAttr("data-tools", s.toolsSide);
     this.el.toggleClass("fv-lightpages", s.lightPagesInDark);
+    this.sfx.ambient(s.ambientRain);
     this.el.style.setProperty("--fv-warm", String(clamp(s.pageWarmth, 0, 100) / 100));
     this.el.toggleClass("fv-warm-on", s.pageWarmth > 0);
     this.rack.setAttr("data-side", s.toolsSide);
@@ -597,6 +622,7 @@ export class BookStage {
 
   destroy(): void {
     this.destroyed = true;
+    this.sfx.ambient(false);
     document.removeEventListener("pointerup", this.onPointerUp);
     document.removeEventListener("pointerdown", this.onDocPointerDown, true);
     this.laptop.destroy();
@@ -1767,6 +1793,37 @@ export class BookStage {
     this.renderTools();
   }
 
+  /** "Go to page": jumps to a printed page number (exact once every note has been laid out). */
+  private async goToPageNumber(): Promise<void> {
+    const nb = this.notebook;
+    if (!nb || !this.isOpen) return;
+    const answer = await this.host.promptText({ title: "Go to page", placeholder: "12", hint: "A page number as printed at the foot of the pages." });
+    const n = Number.parseInt((answer ?? "").trim(), 10);
+    if (!Number.isFinite(n) || n < 1) return;
+    for (let i = 0; i < nb.notes.length; i++) {
+      const note = nb.notes[i];
+      if (!isNote(note)) continue;
+      const start = this.tally.start(nb.notes, i).folio;
+      const count = this.tally.pages(note.path) ?? this.tally.estimate(note);
+      if (n >= start && n < start + count) {
+        await this.jumpToPage(i, n - start);
+        return;
+      }
+    }
+    // beyond the end: go to the last page
+    const last = nb.notes.length - 1;
+    if (last >= 0) await this.jumpToPage(last, Number.MAX_SAFE_INTEGER);
+  }
+
+  /** + and - change the text size of the current view. */
+  private nudgeTextSize(delta: number): void {
+    const s = this.host.settings;
+    const key = s.viewMode === "handwritten" ? "handSize" : "textSize";
+    s[key] = clamp(s[key] + delta, 60, 220);
+    this.host.saveSettings();
+    this.applySettings();
+  }
+
   /** The note a page (or anything inside it) belongs to: the two visible pages can be from different notes. */
   private ownerOf(el: Element | null): { idx: number; note: NoteRef; layout: NoteLayout } | null {
     const pg = el?.closest<HTMLElement>(".fv-page");
@@ -2146,6 +2203,13 @@ export class BookStage {
     item("panel-right", "Outline", "outline", () => this.cb.toggleOutline());
     item("layout-grid", "Shelf mode", "shelf", () => this.cb.shelfRequested());
     item("eye-off", "Frameless mode (F)", "frameless", () => this.cb.toggleFrameless());
+    if (this.isOpen) item("hash", "Go to page… (G)", "gotopage", () => void this.goToPageNumber());
+    item("cloud-rain", this.host.settings.ambientRain ? "Rain sounds off" : "Rain sounds on", "rain", () => {
+      this.host.settings.ambientRain = !this.host.settings.ambientRain;
+      this.host.saveSettings();
+      this.sfx.ambient(this.host.settings.ambientRain);
+      this.sfx.pen(this.host.settings.ambientRain);
+    });
     item("arrow-left-right", this.host.settings.toolsSide === "right" ? "Tools on the left" : "Tools on the right", "toolsside", () => {
       this.host.settings.toolsSide = this.host.settings.toolsSide === "right" ? "left" : "right";
       this.host.saveSettings();

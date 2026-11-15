@@ -271,6 +271,8 @@ export interface FlipViewSettings {
 
   // sound
   soundEnabled: boolean;
+  /** A soft, looping rain in the background (needs sound switched on). */
+  ambientRain: boolean;
   soundVolume: number; // 0..100
 
   // text view
@@ -395,6 +397,7 @@ export const DEFAULT_SETTINGS: FlipViewSettings = {
   legendPos: null,
 
   soundEnabled: true,
+  ambientRain: false,
   soundVolume: 45,
 
   textFont: "",

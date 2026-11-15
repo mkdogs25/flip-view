@@ -22,7 +22,8 @@ in 3D; turn pages to read your notes either as **handwriting** or as **formatted
 - **Closing the laptop:** a "Close laptop, back to notebook" button appears while it is up (click the tucked-away notebook, press Esc, or use the browser's x as well).
 - **Little extras:** Home/End jump to the first/last note, an optional mouse-wheel page turn, "~N min to read" on the info card, and "Resume where you left off" to reopen your last page.
 - **Frameless mode:** press F (or use the "..." menu) to hide every panel, toolbar, shelf and prop so only the notebook on the desk is left, bigger. Esc or F brings the controls back; move the mouse to the top edge for a "Show controls" button.
-- **Quick keys:** F frameless, T handwritten/text, B bookmark this page, Home/End first/last note, / search.
+- **Quick keys:** F frameless, T handwritten/text, B bookmark this page, G go to a page number, + / - text size, Home/End first/last note, / search.
+- **Swipe to turn pages** on touch screens, and an optional **rain sound** in the background ("..." menu or settings).
 - **Warm page tint** for night reading (settings).
 - **Tilt the notebook** to your liking with the slider in the "..." menu or settings (0 = flat towards you).
 - **No blank pages:** the book is one continuous run of pages. The contents, separators and notes follow each other page by page, so a short note or the end of a long one shares its spread with whatever comes next (the footer names both). Ink, highlights, links and margin notes belong to the note on the page you use them on.
