@@ -23,6 +23,7 @@ in 3D; turn pages to read your notes either as **handwriting** or as **formatted
 - **Little extras:** Home/End jump to the first/last note, an optional mouse-wheel page turn, "~N min to read" on the info card, and "Resume where you left off" to reopen your last page.
 - **Frameless mode:** press F (or use the "..." menu) to hide every panel, toolbar, shelf and prop so only the notebook on the desk is left, bigger. Esc or F brings the controls back; move the mouse to the top edge for a "Show controls" button.
 - **Quick keys:** F frameless, T handwritten/text, B bookmark this page, G go to a page number, + / - text size, Home/End first/last note, / search.
+- **Handy tools:** "New note in this notebook" (created in the folder, or with the property, and opened), "Copy this notebook's highlights" (markdown with quotes, margin notes and links to the notes), and a sort button in the outline that cycles the notes A–Z, newest edited, oldest created.
 - **Swipe to turn pages** on touch screens, and an optional **rain sound** in the background ("..." menu or settings).
 - **Warm page tint** for night reading (settings).
 - **Tilt the notebook** to your liking with the slider in the "..." menu or settings (0 = flat towards you).

@@ -18,6 +18,8 @@ export interface StageCallbacks {
   toggleOutline(): void;
   toggleFocus(): void;
   toggleFrameless(): void;
+  newNote(): void;
+  copyHighlights(): void;
   modeChanged(mode: ViewMode): void;
   customiseCover(nb: Notebook): void;
   /** Open/closed state, current note or page changed. */
@@ -2204,6 +2206,10 @@ export class BookStage {
     item("layout-grid", "Shelf mode", "shelf", () => this.cb.shelfRequested());
     item("eye-off", "Frameless mode (F)", "frameless", () => this.cb.toggleFrameless());
     if (this.isOpen) item("hash", "Go to page… (G)", "gotopage", () => void this.goToPageNumber());
+    if (this.notebook) {
+      item("file-plus", "New note in this notebook", "newnote", () => this.cb.newNote());
+      item("highlighter", "Copy this notebook's highlights", "copyhl", () => this.cb.copyHighlights());
+    }
     item("cloud-rain", this.host.settings.ambientRain ? "Rain sounds off" : "Rain sounds on", "rain", () => {
       this.host.settings.ambientRain = !this.host.settings.ambientRain;
       this.host.saveSettings();

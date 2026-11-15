@@ -10,6 +10,7 @@ export interface OutlineHandlers {
   /** `to` is the index the item should have once moved. */
   reorder(from: number, to: number): void;
   addSeparator(sub?: boolean): void;
+  sortNotes(): string;
   renameSeparator(index: number): void;
   deleteSeparator(index: number): void;
   removeHighlight(id: string): void;
@@ -43,6 +44,10 @@ export class OutlinePanel {
     this.sub = titles.createDiv({ cls: "fv-ol-sub" });
     iconButton(head, "bookmark-plus", "Add a separator page", "fv-ol-add").addEventListener("click", () => this.h.addSeparator());
     iconButton(head, "corner-down-right", "Add a sub-separator under the current section", "fv-ol-add-sub").addEventListener("click", () => this.h.addSeparator(true));
+    const sort = iconButton(head, "arrow-up-down", "Sort the notes (A–Z, newest, oldest)", "fv-ol-sort");
+    sort.addEventListener("click", () => {
+      sort.setAttr("title", `Sorted: ${this.h.sortNotes()}. Click for the next order.`);
+    });
     iconButton(head, "x", "Hide outline").addEventListener("click", () => this.h.toggle());
     this.list = this.el.createDiv({ cls: "fv-ol-list" });
     this.el.createDiv({ cls: "fv-ol-foot", text: "Drag to reorder. Separators are page dividers you can place between notes; sub-separators sit under them." });

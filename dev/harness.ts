@@ -182,6 +182,15 @@ const host: NotebookHost = {
   openLink: () => undefined,
   openExternal: () => undefined,
   createNotebook: () => undefined,
+  createNote: async (_nb, title) => {
+    const path = "Physics/" + title + ".md";
+    SOURCES["Physics/" + title] = "# " + title + "\n\nNew.";
+    notebooks[0].notes.push({ path, title, mtime: Date.now(), ctime: Date.now(), size: 20 });
+    return path;
+  },
+  copyText: (text) => {
+    (window as unknown as { __copied?: string }).__copied = text;
+  },
   openSettings: () => undefined,
   showHelp: () => undefined,
   isDarkTheme: () => q.get("obsidian") === "dark",

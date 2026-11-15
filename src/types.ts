@@ -442,6 +442,10 @@ export interface NotebookHost {
   openLink(href: string, sourcePath: string, newTab: boolean): void;
   openExternal(href: string): void;
   createNotebook(): void;
+  /** Creates a note inside a notebook (in its folder, or with its property) and resolves to its path. */
+  createNote(nb: Notebook, title: string): Promise<string | null>;
+  /** Puts text on the clipboard and says so. */
+  copyText(text: string, what: string): void;
   openSettings(): void;
   showHelp(): void;
   /** Resolves an internal link to a vault path (and heading), or null if it points nowhere. */

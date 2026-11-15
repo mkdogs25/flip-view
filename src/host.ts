@@ -138,6 +138,34 @@ export class ObsidianHost implements NotebookHost {
     }
   }
 
+  async createNote(nb: Notebook, title: string): Promise<string | null> {
+    const { app } = this.plugin;
+    const s = this.settings;
+    const name = title.trim().replace(/[\\/:*?"<>|#^[\]]/g, "").trim();
+    if (!name) return null;
+    try {
+      let dir = "";
+      let body = `# ${name}\n\n`;
+      if (nb.id.startsWith("folder:")) dir = nb.id.slice("folder:".length);
+      else body = `---\n${s.propertyName}: ${nb.originalName}\n---\n\n# ${name}\n\n`;
+      let path = normalizePath(dir ? `${dir}/${name}.md` : `${name}.md`);
+      for (let i = 2; app.vault.getAbstractFileByPath(path); i++) path = normalizePath(dir ? `${dir}/${name} ${i}.md` : `${name} ${i}.md`);
+      await app.vault.create(path, body);
+      return path;
+    } catch (err) {
+      console.error("[flip-view] could not create note", err);
+      new Notice("Could not create the note. See the console for details.");
+      return null;
+    }
+  }
+
+  copyText(text: string, what: string): void {
+    void navigator.clipboard.writeText(text).then(
+      () => new Notice(`Copied ${what} to the clipboard.`),
+      () => new Notice("Could not copy to the clipboard."),
+    );
+  }
+
   openSettings(): void {
     const setting = (this.plugin.app as unknown as { setting?: { open(): void; openTabById(id: string): void } }).setting;
     setting?.open();

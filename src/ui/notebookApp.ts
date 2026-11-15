@@ -124,6 +124,8 @@ export class NotebookApp {
       toggleOutline: () => this.toggleOutline(),
       toggleFocus: () => this.toggleFocus(),
       toggleFrameless: () => this.toggleFrameless(),
+      newNote: () => void this.newNote(),
+      copyHighlights: () => this.copyHighlights(),
       modeChanged: (mode) => this.setMode(mode),
       customiseCover: (nb) => void this.customiseCover(nb),
       stateChanged: () => this.refreshOutline(),
@@ -172,6 +174,7 @@ export class NotebookApp {
       page: (i, page) => void this.stage.jumpToPage(i, page),
       reorder: (from, to) => this.reorder(from, to),
       addSeparator: (sub) => void this.addSeparator(!!sub),
+      sortNotes: () => this.sortNotes(),
       renameSeparator: (i) => void this.renameSeparator(i),
       deleteSeparator: (i) => this.deleteSeparator(i),
       removeHighlight: (id) => this.stage.removeHighlight(id),
@@ -377,6 +380,84 @@ export class NotebookApp {
     this.host.saveSettings();
     this.stage.tick();
     this.reload();
+  }
+
+  private sortStep = 0;
+
+  /** Cycles the notes between separators through A–Z, newest edited first and oldest created first. Returns the label of the new order. */
+  private sortNotes(): string {
+    const nb = this.stage.currentNotebook();
+    if (!nb) return "";
+    const modes: Array<[string, (a: NoteRef, b: NoteRef) => number]> = [
+      ["A–Z", (a, b) => a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: "base" })],
+      ["newest edited first", (a, b) => b.mtime - a.mtime],
+      ["oldest created first", (a, b) => a.ctime - b.ctime],
+    ];
+    const [label, cmp] = modes[this.sortStep % modes.length];
+    this.sortStep++;
+    const keys: string[] = [];
+    let run: NoteRef[] = [];
+    const flush = () => {
+      run.sort(cmp);
+      keys.push(...run.map((n) => n.path));
+      run = [];
+    };
+    for (const n of nb.notes) {
+      if (n.kind === "index") continue;
+      if (n.kind === "separator") {
+        flush();
+        keys.push(n.path);
+      } else run.push(n);
+    }
+    flush();
+    this.host.settings.noteOrder[nb.id] = keys;
+    this.host.saveSettings();
+    this.reload();
+    return label;
+  }
+
+  /** Makes a new note in the notebook being read, then opens the book on it. */
+  private async newNote(): Promise<void> {
+    const nb = this.stage.currentNotebook();
+    if (!nb) return;
+    const title = await this.host.promptText({ title: "New note", placeholder: "Untitled", hint: `Created in "${nb.name}" and added at the end.` });
+    if (!title?.trim()) return;
+    const path = await this.host.createNote(nb, title);
+    if (!path) return;
+    window.setTimeout(() => {
+      this.reload();
+      window.setTimeout(() => {
+        const cur = this.stage.currentNotebook();
+        const idx = cur ? cur.notes.findIndex((n) => n.path === path) : -1;
+        if (idx >= 0) void this.stage.jumpToPage(idx, 0);
+      }, 250);
+    }, 500);
+  }
+
+  /** All highlights (and their margin notes) in this notebook, as markdown on the clipboard. */
+  private copyHighlights(): void {
+    const nb = this.stage.currentNotebook();
+    if (!nb) return;
+    const s = this.host.settings;
+    const out: string[] = [`# Highlights: ${nb.name}`, ""];
+    let count = 0;
+    for (const n of nb.notes) {
+      if (!isNote(n)) continue;
+      const list = s.highlights[n.path] ?? [];
+      if (list.length === 0) continue;
+      out.push(`## [[${n.title}]]`, "");
+      for (const h of list) {
+        const label = s.highlighters[h.slot]?.label;
+        out.push(`> ${h.quote.replace(/\s+/g, " ").trim()}${label ? ` (${label})` : ""}`);
+        if (h.note) out.push(`> — ${h.note}`);
+        out.push("");
+        count++;
+      }
+    }
+    if (count === 0) {
+      out.push("_No highlights yet._");
+    }
+    this.host.copyText(out.join("\n"), count ? `${count} highlight${count === 1 ? "" : "s"}` : "an empty highlights list");
   }
 
   private async addSeparator(sub = false): Promise<void> {
