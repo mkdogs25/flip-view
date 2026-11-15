@@ -4,13 +4,65 @@ import { Rng, clamp, makeNoise, mulberry32, smoothstep } from "../util/rng";
 type RGB = [number, number, number];
 type ConcreteStyle = Exclude<CoverStyle, "random">;
 
-export const COVER_STYLES: ConcreteStyle[] = ["cosmic", "leather", "linen", "marble", "geometric"];
+export const COVER_STYLES: ConcreteStyle[] = [
+  "storybook",
+  "cosmic",
+  "leather",
+  "linen",
+  "marble",
+  "geometric",
+  "plain",
+  "kraft",
+  "gradient",
+  "watercolor",
+  "terrazzo",
+  "waves",
+  "suede",
+  "canvas",
+  "cork",
+  "woodgrain",
+  "denim",
+];
+
+interface Tint {
+  h: number;
+  s: number;
+  l: number;
+}
+
+/** Parses `#rrggbb` into HSL, or null for empty / invalid input. */
+function parseTint(hex: string | undefined): Tint | null {
+  const m = /^#?([0-9a-f]{6})$/i.exec((hex ?? "").trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  const r = ((n >> 16) & 255) / 255;
+  const g = ((n >> 8) & 255) / 255;
+  const b = (n & 255) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const d = max - min;
+  let h = 0;
+  let sat = 0;
+  if (d > 0) {
+    sat = d / (1 - Math.abs(2 * l - 1));
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+  return { h, s: sat, l };
+}
 
 export interface CoverResult {
   url: string;
   style: ConcreteStyle;
   /** Mid-tone of the cover, used to tint the elastic band and end-papers. */
   base: string;
+  /** Title colour that reads well on this cover, and whether the cover is light. */
+  ink: string;
+  lightCover: boolean;
   dark: string;
   light: string;
 }
@@ -51,15 +103,21 @@ function sparkle(ctx: Ctx, x: number, y: number, s: number): void {
 }
 
 /** Per-pixel painter: fills the canvas by evaluating `shade` for every pixel and adds film grain. */
+/** Low-resolution mode paints every third pixel and scales up: ~9x cheaper, used for shelf spines. */
+let LOW = false;
+
 function paintPixels(ctx: Ctx, seed: number, grain: number, shade: (x: number, y: number, out: RGB) => void): void {
-  const img = ctx.createImageData(W, H);
+  const step = LOW ? 3 : 1;
+  const w = Math.ceil(W / step);
+  const h = Math.ceil(H / step);
+  const img = ctx.createImageData(w, h);
   const d = img.data;
   const g = mulberry32(seed ^ 0xa5a5a5a5);
   const out: RGB = [0, 0, 0];
   let i = 0;
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-      shade(x, y, out);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      shade(x * step, y * step, out);
       const n = (g() - 0.5) * grain;
       d[i++] = clamp(out[0] + n, 0, 255);
       d[i++] = clamp(out[1] + n, 0, 255);
@@ -67,10 +125,20 @@ function paintPixels(ctx: Ctx, seed: number, grain: number, shade: (x: number, y
       d[i++] = 255;
     }
   }
-  ctx.putImageData(img, 0, 0);
+  if (step === 1) {
+    ctx.putImageData(img, 0, 0);
+    return;
+  }
+  const tmp = document.createElement("canvas");
+  tmp.width = w;
+  tmp.height = h;
+  tmp.getContext("2d")?.putImageData(img, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(tmp, 0, 0, W, H);
 }
 
 function addGrain(ctx: Ctx, seed: number, amount: number): void {
+  if (LOW) return;
   const img = ctx.getImageData(0, 0, W, H);
   const d = img.data;
   const g = mulberry32(seed ^ 0x5bd1e995);
@@ -87,13 +155,15 @@ interface Theme {
   base: RGB;
   dark: RGB;
   light: RGB;
+  ink?: string;
+  lightCover?: boolean;
 }
 
 /* ------------------------------------------------------------------ cosmic */
 
-function paintCosmic(ctx: Ctx, rng: Rng, seed: number): Theme {
+function paintCosmic(ctx: Ctx, rng: Rng, seed: number, tint: Tint | null): Theme {
   const noise = makeNoise(seed);
-  const hue = rng.pick([262, 275, 250, 285, 232, 300, 210]) + rng.range(-8, 8);
+  const hue = tint ? tint.h : rng.pick([262, 275, 250, 285, 232, 300, 210]) + rng.range(-8, 8);
   const c0 = hsl(hue, 0.55, 0.045);
   const c1 = hsl(hue, 0.5, 0.17);
   const c2 = hsl(hue + rng.range(25, 70), 0.6, 0.4);
@@ -265,7 +335,7 @@ function paintCosmic(ctx: Ctx, rng: Rng, seed: number): Theme {
 
 /* ----------------------------------------------------------------- leather */
 
-function paintLeather(ctx: Ctx, rng: Rng, seed: number): Theme {
+function paintLeather(ctx: Ctx, rng: Rng, seed: number, tint: Tint | null): Theme {
   const noise = makeNoise(seed);
   const p = rng.pick([
     { h: 24, s: 0.5, l: 0.24 },
@@ -276,7 +346,7 @@ function paintLeather(ctx: Ctx, rng: Rng, seed: number): Theme {
     { h: 33, s: 0.58, l: 0.34 },
     { h: 285, s: 0.28, l: 0.2 },
   ]);
-  const base = hsl(p.h, p.s, p.l);
+  const base = tint ? hsl(tint.h, Math.max(0.2, tint.s), clamp(tint.l, 0.1, 0.55)) : hsl(p.h, p.s, p.l);
   paintPixels(ctx, seed, 12, (x, y, o) => {
     const g1 = noise.noise(x / 2.4, y / 2.4);
     const g2 = noise.noise((x + 1.6) / 2.4, (y + 1.6) / 2.4);
@@ -306,7 +376,7 @@ function paintLeather(ctx: Ctx, rng: Rng, seed: number): Theme {
 
 /* ------------------------------------------------------------------- linen */
 
-function paintLinen(ctx: Ctx, rng: Rng, seed: number): Theme {
+function paintLinen(ctx: Ctx, rng: Rng, seed: number, tint: Tint | null): Theme {
   const noise = makeNoise(seed);
   const p = rng.pick([
     { h: 160, s: 0.2, l: 0.38 },
@@ -317,7 +387,7 @@ function paintLinen(ctx: Ctx, rng: Rng, seed: number): Theme {
     { h: 195, s: 0.3, l: 0.34 },
     { h: 340, s: 0.3, l: 0.4 },
   ]);
-  const base = hsl(p.h, p.s, p.l);
+  const base = tint ? hsl(tint.h, Math.max(0.15, tint.s * 0.9), clamp(tint.l, 0.2, 0.62)) : hsl(p.h, p.s, p.l);
   const twist = rng.range(1.6, 2.2);
   paintPixels(ctx, seed, 10, (x, y, o) => {
     const wx = Math.sin(x * twist) * 0.5 + 0.5;
@@ -344,10 +414,11 @@ function paintLinen(ctx: Ctx, rng: Rng, seed: number): Theme {
 
 /* ------------------------------------------------------------------ marble */
 
-function paintMarble(ctx: Ctx, rng: Rng, seed: number): Theme {
+function paintMarble(ctx: Ctx, rng: Rng, seed: number, tint: Tint | null): Theme {
   const noise = makeNoise(seed);
-  const hue = rng.range(0, 360);
-  const dark = rng.chance(0.6);
+  const hue = tint ? tint.h : rng.range(0, 360);
+  const dark = tint ? tint.l < 0.5 : rng.chance(0.6);
+  rng.float();
   const bg = dark ? hsl(hue, 0.35, 0.1) : hsl(hue, 0.12, 0.9);
   const fg = dark ? hsl(hue, 0.4, 0.28) : hsl(hue, 0.18, 0.7);
   const vein = dark ? ([232, 196, 130] as RGB) : hsl(hue, 0.3, 0.3);
@@ -370,8 +441,8 @@ function paintMarble(ctx: Ctx, rng: Rng, seed: number): Theme {
 
 /* --------------------------------------------------------------- geometric */
 
-function paintGeometric(ctx: Ctx, rng: Rng, seed: number): Theme {
-  const hue = rng.range(0, 360);
+function paintGeometric(ctx: Ctx, rng: Rng, seed: number, tint: Tint | null): Theme {
+  const hue = tint ? tint.h : rng.range(0, 360);
   const bg = hsl(hue, rng.range(0.25, 0.5), rng.range(0.12, 0.2));
   const pal: RGB[] = [
     hsl(hue + 30, 0.6, 0.55),
@@ -449,6 +520,601 @@ function paintGeometric(ctx: Ctx, rng: Rng, seed: number): Theme {
   return { base: mix(bg, pal[0], 0.2), dark: bg, light: pal[3] };
 }
 
+/* ------------------------------------------------------------------- plain */
+
+function paintPlain(ctx: Ctx, rng: Rng, seed: number, tint: Tint | null): Theme {
+  const noise = makeNoise(seed);
+  const base = tint
+    ? hsl(tint.h, tint.s, clamp(tint.l, 0.12, 0.75))
+    : hsl(rng.range(0, 360), rng.range(0.22, 0.5), rng.range(0.28, 0.5));
+  paintPixels(ctx, seed, 9, (x, y, o) => {
+    const t = 0.93 + noise.fbm(x / 90, y / 90, 2) * 0.14 + (noise.noise(x / 1.6, y / 1.6) - 0.5) * 0.05;
+    o[0] = base[0] * t;
+    o[1] = base[1] * t;
+    o[2] = base[2] * t;
+  });
+  ctx.strokeStyle = "rgba(0,0,0,.16)";
+  ctx.lineWidth = 2;
+  roundedRect(ctx, 44, 44, W - 88, H - 88, 8);
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(255,255,255,.12)";
+  roundedRect(ctx, 46, 46, W - 88, H - 88, 8);
+  ctx.stroke();
+  return { base, dark: mix(base, [0, 0, 0], 0.5), light: mix(base, [255, 255, 255], 0.6) };
+}
+
+/* ------------------------------------------------------------------- kraft */
+
+function paintKraft(ctx: Ctx, rng: Rng, seed: number, tint: Tint | null): Theme {
+  const noise = makeNoise(seed);
+  const base: RGB = tint ? hsl(tint.h, Math.min(0.6, tint.s), clamp(tint.l, 0.3, 0.62)) : [186, 142, 98];
+  paintPixels(ctx, seed, 16, (x, y, o) => {
+    const f = noise.noise(x / 1.3, y / 15);
+    const g = noise.noise(x / 17, y / 1.3);
+    const cloud = noise.fbm(x / 120, y / 120, 3);
+    const t = 0.78 + f * 0.16 + g * 0.1 + cloud * 0.22;
+    o[0] = base[0] * t;
+    o[1] = base[1] * t;
+    o[2] = base[2] * t;
+  });
+  for (let i = 0; i < 160; i++) {
+    ctx.fillStyle = `rgba(60,36,16,${rng.range(0.12, 0.4)})`;
+    ctx.beginPath();
+    ctx.arc(rng.range(0, W), rng.range(0, H), rng.range(0.5, 1.8), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.strokeStyle = "rgba(60,36,16,.55)";
+  ctx.lineWidth = 3;
+  ctx.setLineDash([22, 5, 6, 5]);
+  roundedRect(ctx, 52, 52, W - 104, H - 104, 4);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  return { base, dark: mix(base, [30, 14, 0], 0.6), light: mix(base, [255, 245, 225], 0.6) };
+}
+
+/* ---------------------------------------------------------------- gradient */
+
+function paintGradient(ctx: Ctx, rng: Rng, seed: number, tint: Tint | null): Theme {
+  const noise = makeNoise(seed);
+  const n = rng.int(4, 6);
+  const h0 = tint ? tint.h : rng.range(0, 360);
+  const spread = tint ? 70 : 360;
+  const pts = Array.from({ length: n }, (_, i) => ({
+    x: rng.range(-0.1, 1.1) * W,
+    y: rng.range(-0.1, 1.1) * H,
+    c: hsl(tint ? h0 + rng.range(-spread / 2, spread / 2) : h0 + (i * 360) / n + rng.range(-20, 20), rng.range(0.65, 0.95), rng.range(0.5, 0.68)),
+  }));
+  paintPixels(ctx, seed, 14, (x, y, o) => {
+    const wx = x + (noise.fbm(x / 220, y / 220, 3) - 0.5) * 220;
+    const wy = y + (noise.fbm(x / 220 + 9, y / 220, 3) - 0.5) * 220;
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    let wsum = 0;
+    for (const p of pts) {
+      const d2 = ((wx - p.x) * (wx - p.x) + (wy - p.y) * (wy - p.y)) / 90000 + 0.04;
+      const w = 1 / (d2 * d2);
+      r += p.c[0] * w;
+      g += p.c[1] * w;
+      b += p.c[2] * w;
+      wsum += w;
+    }
+    o[0] = r / wsum;
+    o[1] = g / wsum;
+    o[2] = b / wsum;
+  });
+  const mid = pts[0].c;
+  return { base: mix(mid, [0, 0, 0], 0.3), dark: mix(mid, [0, 0, 0], 0.55), light: mix(mid, [255, 255, 255], 0.7) };
+}
+
+/* ------------------------------------------------------------- watercolour */
+
+function paintWatercolor(ctx: Ctx, rng: Rng, seed: number, tint: Tint | null): Theme {
+  const noise = makeNoise(seed);
+  const h0 = tint ? tint.h : rng.range(0, 360);
+  const blobs = Array.from({ length: 6 }, (_, i) => ({
+    x: rng.range(0, W),
+    y: rng.range(0, H),
+    r: rng.range(170, 400),
+    c: hsl(tint ? h0 + rng.range(-40, 40) : h0 + i * rng.range(35, 70), rng.range(0.6, 0.9), rng.range(0.55, 0.72)),
+  }));
+  const paper: RGB = [247, 242, 231];
+  paintPixels(ctx, seed, 10, (x, y, o) => {
+    const fibre = 0.97 + noise.fbm(x / 3, y / 3, 2) * 0.05;
+    let r = paper[0] * fibre;
+    let g = paper[1] * fibre;
+    let b = paper[2] * fibre;
+    blobs.forEach((bl, i) => {
+      const d = Math.hypot(x - bl.x, y - bl.y) / bl.r + (noise.fbm(x / 100 + i * 7, y / 100, 3) - 0.5) * 0.9;
+      const body = smoothstep(1.0, 0.45, d) * 0.5;
+      const rim = (1 - smoothstep(0, 0.05, Math.abs(d - 0.9))) * 0.22;
+      const a = clamp(body + rim, 0, 0.85);
+      r *= 1 - a * (1 - bl.c[0] / 255);
+      g *= 1 - a * (1 - bl.c[1] / 255);
+      b *= 1 - a * (1 - bl.c[2] / 255);
+    });
+    o[0] = r;
+    o[1] = g;
+    o[2] = b;
+  });
+  const m = blobs[0].c;
+  return { base: mix(m, [0, 0, 0], 0.35), dark: mix(m, [0, 0, 0], 0.6), light: [250, 246, 236] };
+}
+
+/* ---------------------------------------------------------------- terrazzo */
+
+function paintTerrazzo(ctx: Ctx, rng: Rng, seed: number, tint: Tint | null): Theme {
+  const noise = makeNoise(seed);
+  const h0 = tint ? tint.h : rng.range(0, 360);
+  const dark = tint ? tint.l < 0.45 : rng.chance(0.4);
+  const bg = dark ? hsl(h0, 0.25, 0.16) : hsl(h0, 0.22, 0.88);
+  paintPixels(ctx, seed, 10, (x, y, o) => {
+    const t = 0.96 + noise.fbm(x / 70, y / 70, 2) * 0.08;
+    o[0] = bg[0] * t;
+    o[1] = bg[1] * t;
+    o[2] = bg[2] * t;
+  });
+  const palette: RGB[] = [
+    hsl(h0 + 20, 0.7, 0.55),
+    hsl(h0 + 150, 0.6, 0.6),
+    hsl(h0 + 210, 0.55, 0.5),
+    hsl(h0 + 320, 0.65, 0.68),
+    dark ? [236, 228, 210] : [40, 36, 44],
+    [226, 190, 110],
+  ];
+  for (let i = 0; i < 170; i++) {
+    const cx = rng.range(0, W);
+    const cy = rng.range(0, H);
+    const r = Math.pow(rng.float(), 2) * 34 + 7;
+    const n = rng.int(5, 8);
+    const a0 = rng.range(0, Math.PI * 2);
+    ctx.fillStyle = rgba(rng.pick(palette));
+    ctx.beginPath();
+    for (let k = 0; k < n; k++) {
+      const a = a0 + (k / n) * Math.PI * 2;
+      const rr = r * rng.range(0.55, 1.1);
+      const px = cx + Math.cos(a) * rr;
+      const py = cy + Math.sin(a) * rr * 0.8;
+      if (k) ctx.lineTo(px, py);
+      else ctx.moveTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+  addGrain(ctx, seed, 14);
+  return { base: mix(palette[0], bg, 0.3), dark: bg, light: mix(bg, [255, 255, 255], 0.4) };
+}
+
+/* ------------------------------------------------------------------- waves */
+
+function paintWaves(ctx: Ctx, rng: Rng, seed: number, tint: Tint | null): Theme {
+  const h0 = tint ? tint.h : rng.range(0, 360);
+  const step = rng.range(14, 34) * (rng.chance(0.5) ? 1 : -1);
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, rgba(hsl(h0 - step, 0.7, 0.72)));
+  bg.addColorStop(1, rgba(hsl(h0, 0.65, 0.55)));
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+  const layers = rng.int(5, 8);
+  for (let i = 0; i < layers; i++) {
+    const y0 = H * (0.2 + (i / layers) * 0.85);
+    const amp = rng.range(18, 52);
+    const f1 = rng.range(0.006, 0.014);
+    const f2 = rng.range(0.015, 0.03);
+    const p1 = rng.range(0, 6.28);
+    const p2 = rng.range(0, 6.28);
+    ctx.beginPath();
+    ctx.moveTo(0, H);
+    for (let x = 0; x <= W + 8; x += 8) ctx.lineTo(x, y0 + Math.sin(x * f1 + p1) * amp + Math.sin(x * f2 + p2) * amp * 0.4);
+    ctx.lineTo(W, H);
+    ctx.closePath();
+    ctx.fillStyle = rgba(hsl(h0 + step * (i + 1), 0.62, clamp(0.58 - i * 0.045, 0.2, 0.7)), 0.96);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,.18)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+  addGrain(ctx, seed, 16);
+  const m = hsl(h0, 0.6, 0.35);
+  return { base: m, dark: hsl(h0 + step * layers, 0.6, 0.18), light: hsl(h0 - step, 0.7, 0.85) };
+}
+
+/* ------------------------------------------------------------------ suede */
+
+function paintSuede(ctx: Ctx, rng: Rng, seed: number, tint: Tint | null): Theme {
+  const noise = makeNoise(seed);
+  const base = tint ? hsl(tint.h, Math.min(0.7, tint.s), clamp(tint.l, 0.15, 0.6)) : hsl(rng.range(0, 360), rng.range(0.3, 0.6), rng.range(0.28, 0.46));
+  paintPixels(ctx, seed, 18, (x, y, o) => {
+    const nap = noise.noise(x / 1.6 + Math.sin(y / 70) * 4, y / 1.3);
+    const cloud = noise.fbm(x / 60, y / 60, 3);
+    const t = 0.8 + nap * 0.26 + cloud * 0.22;
+    o[0] = base[0] * t;
+    o[1] = base[1] * t;
+    o[2] = base[2] * t;
+  });
+  return { base, dark: mix(base, [0, 0, 0], 0.5), light: mix(base, [255, 255, 255], 0.5) };
+}
+
+/* ----------------------------------------------------------------- canvas */
+
+function paintCanvas(ctx: Ctx, rng: Rng, seed: number, tint: Tint | null): Theme {
+  const noise = makeNoise(seed);
+  const base = tint ? hsl(tint.h, Math.min(0.5, tint.s), clamp(tint.l, 0.25, 0.7)) : hsl(rng.range(25, 50), rng.range(0.12, 0.3), rng.range(0.5, 0.66));
+  paintPixels(ctx, seed, 12, (x, y, o) => {
+    const wx = Math.sin(x * 0.9) * 0.5 + 0.5;
+    const wy = Math.sin(y * 0.9) * 0.5 + 0.5;
+    const over = ((Math.floor(x / 3.5) + Math.floor(y / 3.5)) & 1) === 1;
+    const slub = noise.fbm(over ? x / 2 : x / 40, over ? y / 40 : y / 2, 2);
+    const t = 0.74 + (over ? wx : wy) * 0.2 + slub * 0.3 + (noise.fbm(x / 140, y / 140, 3) - 0.5) * 0.16;
+    o[0] = base[0] * t;
+    o[1] = base[1] * t;
+    o[2] = base[2] * t;
+  });
+  ctx.strokeStyle = "rgba(0,0,0,.18)";
+  ctx.lineWidth = 3;
+  ctx.setLineDash([14, 8]);
+  roundedRect(ctx, 38, 38, W - 76, H - 76, 6);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  return { base, dark: mix(base, [0, 0, 0], 0.55), light: mix(base, [255, 255, 255], 0.5) };
+}
+
+/* ------------------------------------------------------------------- cork */
+
+function paintCork(ctx: Ctx, rng: Rng, seed: number, tint: Tint | null): Theme {
+  const noise = makeNoise(seed);
+  const base: RGB = tint ? hsl(tint.h, Math.min(0.55, tint.s), clamp(tint.l, 0.3, 0.6)) : [194, 150, 102];
+  rng.float();
+  paintPixels(ctx, seed, 16, (x, y, o) => {
+    const cell = noise.noise(x / 5, y / 5);
+    const pit = smoothstep(0.64, 0.74, cell);
+    const gran = noise.noise(x / 2.2 + 40, y / 2.2);
+    const t = 0.82 + noise.fbm(x / 34, y / 34, 3) * 0.3 - pit * 0.38 + (gran - 0.5) * 0.22;
+    o[0] = base[0] * t;
+    o[1] = base[1] * t;
+    o[2] = base[2] * t;
+  });
+  return { base, dark: mix(base, [30, 14, 0], 0.6), light: mix(base, [255, 240, 215], 0.55) };
+}
+
+/* ------------------------------------------------------------------- wood */
+
+function paintWood(ctx: Ctx, rng: Rng, seed: number, tint: Tint | null): Theme {
+  const noise = makeNoise(seed);
+  const base = tint ? hsl(tint.h, Math.min(0.6, tint.s), clamp(tint.l, 0.2, 0.55)) : hsl(rng.range(18, 36), rng.range(0.4, 0.6), rng.range(0.3, 0.44));
+  const freq = rng.range(7, 12);
+  paintPixels(ctx, seed, 8, (x, y, o) => {
+    const warp = noise.fbm(x / 220, y / 70, 3);
+    const rings = Math.sin(x / freq + warp * 16) * 0.5 + 0.5;
+    const streak = noise.noise(x / 2, y / 46);
+    const t = 0.7 + rings * 0.16 + streak * 0.22 + noise.fbm(x / 90, y / 90, 2) * 0.12;
+    o[0] = base[0] * t;
+    o[1] = base[1] * t;
+    o[2] = base[2] * t;
+  });
+  return { base, dark: mix(base, [20, 8, 0], 0.55), light: mix(base, [255, 235, 200], 0.55) };
+}
+
+/* ------------------------------------------------------------------ denim */
+
+function paintDenim(ctx: Ctx, rng: Rng, seed: number, tint: Tint | null): Theme {
+  const noise = makeNoise(seed);
+  const base = tint ? hsl(tint.h, Math.min(0.7, tint.s), clamp(tint.l, 0.18, 0.5)) : hsl(rng.range(205, 225), rng.range(0.35, 0.5), rng.range(0.26, 0.36));
+  paintPixels(ctx, seed, 12, (x, y, o) => {
+    const diag = ((x + y) % 6) / 6;
+    const fibre = noise.noise(x / 1.4, y / 1.4);
+    const fade = noise.fbm(x / 120, y / 120, 3);
+    const t = 0.72 + diag * 0.18 + (fibre - 0.5) * 0.3 + fade * 0.28;
+    o[0] = base[0] * t;
+    o[1] = base[1] * t;
+    o[2] = base[2] * t;
+  });
+  ctx.strokeStyle = "rgba(232,166,74,.9)";
+  ctx.lineWidth = 3.2;
+  ctx.setLineDash([12, 7]);
+  ctx.lineCap = "round";
+  roundedRect(ctx, 40, 40, W - 80, H - 80, 14);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  return { base, dark: mix(base, [0, 0, 0], 0.5), light: [232, 166, 74] };
+}
+
+/* -------------------------------------------------------------- storybook */
+
+function vGradient(ctx: Ctx, a: RGB, b: RGB): void {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, rgba(a));
+  g.addColorStop(1, rgba(b));
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function leaf(ctx: Ctx, x: number, y: number, len: number, ang: number, fill: string, stroke?: string): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(ang);
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.bezierCurveTo(len * 0.25, -len * 0.32, len * 0.7, -len * 0.26, len, 0);
+  ctx.bezierCurveTo(len * 0.7, len * 0.26, len * 0.25, len * 0.32, 0, 0);
+  ctx.fillStyle = fill;
+  ctx.fill();
+  if (stroke) {
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(len * 0.92, 0);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function starField(ctx: Ctx, rng: Rng, n: number, tone: RGB = [245, 232, 200]): void {
+  for (let i = 0; i < n; i++) {
+    ctx.fillStyle = rgba(tone, rng.range(0.25, 0.95));
+    ctx.beginPath();
+    ctx.arc(rng.range(0, W), rng.range(0, H * 0.8), Math.pow(rng.float(), 3) * 1.8 + 0.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/** Ornate gold double frame with corner flourishes, like a gilded hardcover. */
+function goldFrame(ctx: Ctx, col: RGB): void {
+  ctx.save();
+  ctx.strokeStyle = rgba(col, 0.92);
+  ctx.lineWidth = 3.4;
+  roundedRect(ctx, 30, 30, W - 60, H - 60, 12);
+  ctx.stroke();
+  ctx.lineWidth = 1.4;
+  roundedRect(ctx, 42, 42, W - 84, H - 84, 6);
+  ctx.stroke();
+  ctx.fillStyle = rgba(col, 0.95);
+  for (const [cx, cy, sx, sy] of [[42, 42, 1, 1], [W - 42, 42, -1, 1], [42, H - 42, 1, -1], [W - 42, H - 42, -1, -1]] as const) {
+    ctx.beginPath();
+    ctx.arc(cx + sx * 16, cy + sy * 16, 11, sx > 0 ? Math.PI : 0, sx > 0 ? Math.PI * 1.5 : Math.PI * 0.5, false);
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(cx + sx * 7, cy + sy * 7, 3.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  for (const [x, y] of [[W / 2, 42], [W / 2, H - 42], [42, H / 2], [W - 42, H / 2]]) {
+    ctx.beginPath();
+    ctx.moveTo(x, y - 7);
+    ctx.lineTo(x + 7, y);
+    ctx.lineTo(x, y + 7);
+    ctx.lineTo(x - 7, y);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function paintStorybook(ctx: Ctx, rng: Rng, seed: number, tint: Tint | null): Theme {
+  const gold: RGB = [226, 186, 104];
+  const kind = tint ? "castle" : rng.pick(["castle", "botanical", "planet", "forest", "blossom", "star"] as const);
+  let theme: Theme;
+  if (kind === "castle") {
+    const h = tint ? tint.h : rng.range(255, 285);
+    vGradient(ctx, hsl(h, 0.5, 0.22), hsl(h, 0.6, 0.07));
+    starField(ctx, rng, 140);
+    const glow = ctx.createRadialGradient(W * 0.5, H * 0.3, 20, W * 0.5, H * 0.3, 260);
+    glow.addColorStop(0, "rgba(255,214,140,.38)");
+    glow.addColorStop(1, "rgba(255,214,140,0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = rgba(gold);
+    ctx.beginPath();
+    ctx.arc(W * 0.5, H * 0.3, 112, Math.PI * 0.62, Math.PI * 1.55, false);
+    ctx.arc(W * 0.5 + 52, H * 0.3 - 24, 98, Math.PI * 1.5, Math.PI * 0.62, true);
+    ctx.fill();
+    sparkleAt(ctx, W * 0.68, H * 0.2, 16, gold);
+    sparkleAt(ctx, W * 0.27, H * 0.34, 11, gold);
+    // castle silhouette
+    const base = hsl(h, 0.45, 0.045);
+    ctx.fillStyle = rgba(base);
+    const towers: Array<[number, number, number]> = [[0.2, 0.1, 0.62], [0.33, 0.12, 0.55], [0.5, 0.16, 0.5], [0.68, 0.12, 0.57], [0.8, 0.1, 0.64]];
+    ctx.fillRect(W * 0.12, H * 0.76, W * 0.76, H * 0.3);
+    for (const [cx, tw, top] of towers) {
+      const x = W * cx - (W * tw) / 2;
+      ctx.fillRect(x, H * (top + 0.1), W * tw, H * 0.4);
+      ctx.beginPath();
+      ctx.moveTo(x - 6, H * (top + 0.1));
+      ctx.lineTo(x + (W * tw) / 2, H * (top - 0.02));
+      ctx.lineTo(x + W * tw + 6, H * (top + 0.1));
+      ctx.fill();
+    }
+    ctx.fillStyle = "rgba(255,206,110,.9)";
+    for (let i = 0; i < 14; i++) ctx.fillRect(rng.range(W * 0.16, W * 0.82), rng.range(H * 0.7, H * 0.88), 7, 11);
+    theme = { base: hsl(h, 0.5, 0.3), dark: hsl(h, 0.6, 0.08), light: gold, ink: "#f6ecd2" };
+  } else if (kind === "botanical") {
+    vGradient(ctx, [247, 238, 218], [232, 214, 178]);
+    const cx = W / 2;
+    const cy = H * 0.34;
+    ctx.strokeStyle = "#7d5a3a";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy + 40);
+    ctx.bezierCurveTo(cx + 30, cy + 160, cx - 36, cy + 260, cx, H * 0.78);
+    ctx.stroke();
+    leaf(ctx, cx + 4, cy + 150, 120, -0.5, "#a8b98a", "#7d8a5e");
+    leaf(ctx, cx - 4, cy + 200, 110, Math.PI + 0.55, "#a8b98a", "#7d8a5e");
+    for (let i = 0; i < 9; i++) {
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate((i / 9) * Math.PI * 2);
+      const g = ctx.createLinearGradient(0, 0, 0, -130);
+      g.addColorStop(0, "#f3c9a8");
+      g.addColorStop(1, "#e99aa0");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.ellipse(0, -72, 30, 66, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(120,70,50,.55)";
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.fillStyle = "#e9b04f";
+    ctx.beginPath();
+    ctx.arc(cx, cy, 24, 0, Math.PI * 2);
+    ctx.fill();
+    for (let i = 0; i < 26; i++) {
+      ctx.fillStyle = "rgba(125,90,58,.35)";
+      ctx.beginPath();
+      ctx.arc(rng.range(60, W - 60), rng.range(60, H - 60), rng.range(1, 3), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    theme = { base: [200, 160, 120], dark: [110, 80, 54], light: gold, ink: "#4a3524", lightCover: true };
+  } else if (kind === "planet") {
+    const h = rng.range(215, 245);
+    vGradient(ctx, hsl(h, 0.55, 0.16), hsl(h, 0.6, 0.06));
+    starField(ctx, rng, 170);
+    const cx = W * 0.52;
+    const cy = H * 0.32;
+    const r = 104;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(-0.4);
+    const ring = (front: boolean) => {
+      ctx.beginPath();
+      ctx.ellipse(0, 0, r * 2.05, r * 0.52, 0, front ? 0 : Math.PI, front ? Math.PI : Math.PI * 2);
+      ctx.strokeStyle = rgba(gold, 0.9);
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(0, 0, r * 1.65, r * 0.4, 0, front ? 0 : Math.PI, front ? Math.PI : Math.PI * 2);
+      ctx.strokeStyle = rgba(gold, 0.45);
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    };
+    ring(false);
+    const g = ctx.createRadialGradient(-r * 0.35, -r * 0.35, 6, 0, 0, r);
+    g.addColorStop(0, "#c9a3e8");
+    g.addColorStop(0.5, "#6b4fa8");
+    g.addColorStop(1, "#1b1240");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = rgba(gold, 0.7);
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ring(true);
+    ctx.restore();
+    ctx.strokeStyle = rgba(gold, 0.35);
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + 20, 330, 120, -0.4, 0.2, 2.9);
+    ctx.stroke();
+    sparkleAt(ctx, W * 0.2, H * 0.22, 14, gold);
+    sparkleAt(ctx, W * 0.82, H * 0.5, 12, gold);
+    theme = { base: hsl(h, 0.5, 0.26), dark: hsl(h, 0.6, 0.07), light: gold, ink: "#f6ecd2" };
+  } else if (kind === "forest") {
+    vGradient(ctx, [30, 66, 48], [12, 32, 24]);
+    for (const side of [0, 1]) {
+      ctx.strokeStyle = rgba(gold, 0.8);
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      const x0 = side ? W - 84 : 84;
+      ctx.moveTo(x0, 70);
+      for (let y = 70; y < H - 70; y += 40) ctx.lineTo(x0 + Math.sin(y / 60 + side) * 26, y + 40);
+      ctx.stroke();
+      for (let y = 100; y < H - 90; y += 52) {
+        const x = x0 + Math.sin(y / 60 + side) * 26;
+        leaf(ctx, x, y, 54, (side ? Math.PI : 0) + rng.range(-0.8, -0.2), rgba(gold, 0.55), rgba(gold, 0.9));
+        leaf(ctx, x, y + 22, 44, (side ? Math.PI : 0) + rng.range(0.2, 0.8), "rgba(120,170,110,.5)", "rgba(190,220,150,.8)");
+      }
+    }
+    // a gilded fern at the heart of the cover
+    for (let i = -5; i <= 5; i++) {
+      leaf(ctx, W / 2, H * 0.52, 190 - Math.abs(i) * 14, -Math.PI / 2 + i * 0.22, "rgba(226,186,104,.18)", rgba(gold, 0.85));
+    }
+    sparkleAt(ctx, W * 0.5, H * 0.14, 15, gold);
+    theme = { base: [40, 90, 62], dark: [12, 30, 22], light: gold, ink: "#f1e6c6" };
+  } else if (kind === "blossom") {
+    vGradient(ctx, [238, 190, 205], [214, 140, 166]);
+    ctx.strokeStyle = "#6b4636";
+    ctx.lineCap = "round";
+    const branch: Array<[number, number]> = [[W + 20, 120], [W * 0.78, 190], [W * 0.55, 230], [W * 0.3, 300], [-20, 340]];
+    ctx.lineWidth = 9;
+    ctx.beginPath();
+    branch.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
+    ctx.stroke();
+    ctx.lineWidth = 4;
+    for (const [x, y] of branch.slice(1, 4)) {
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - 40, y - 70 + rng.range(-20, 20));
+      ctx.stroke();
+    }
+    const blossom = (x: number, y: number, r: number) => {
+      for (let i = 0; i < 5; i++) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate((i / 5) * Math.PI * 2 + rng.range(-0.1, 0.1));
+        ctx.fillStyle = "#fff1f4";
+        ctx.strokeStyle = "rgba(200,100,130,.7)";
+        ctx.lineWidth = 1.3;
+        ctx.beginPath();
+        ctx.ellipse(0, -r * 0.62, r * 0.42, r * 0.62, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+      ctx.fillStyle = "#e6a23c";
+      ctx.beginPath();
+      ctx.arc(x, y, r * 0.14, 0, Math.PI * 2);
+      ctx.fill();
+    };
+    for (let i = 0; i < 12; i++) blossom(rng.range(W * 0.08, W * 0.92), rng.range(120, 360), rng.range(20, 36));
+    for (let i = 0; i < 18; i++) {
+      ctx.fillStyle = "rgba(255,241,244,.8)";
+      ctx.beginPath();
+      ctx.ellipse(rng.range(40, W - 40), rng.range(380, H - 60), 6, 3.5, rng.range(0, 3), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    theme = { base: [220, 150, 172], dark: [130, 60, 84], light: gold, ink: "#5a2c3c", lightCover: true };
+  } else {
+    vGradient(ctx, [24, 20, 18], [8, 7, 6]);
+    const cx = W / 2;
+    const cy = H * 0.31;
+    ctx.strokeStyle = rgba(gold, 0.5);
+    ctx.lineWidth = 1.4;
+    for (let i = 0; i < 48; i++) {
+      const a = (i / 48) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * 70, cy + Math.sin(a) * 70);
+      ctx.lineTo(cx + Math.cos(a) * (i % 2 ? 150 : 210), cy + Math.sin(a) * (i % 2 ? 150 : 210));
+      ctx.stroke();
+    }
+    const g = ctx.createRadialGradient(cx, cy, 4, cx, cy, 110);
+    g.addColorStop(0, "#fff1bd");
+    g.addColorStop(1, "#c8952e");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2 - Math.PI / 2;
+      const rr = i % 2 ? 36 : 112;
+      ctx.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+    }
+    ctx.closePath();
+    ctx.fill();
+    starField(ctx, rng, 70, [226, 186, 104]);
+    theme = { base: [60, 48, 30], dark: [8, 7, 6], light: gold, ink: "#f1dfb0" };
+  }
+  goldFrame(ctx, gold);
+  addGrain(ctx, seed, 12);
+  return theme;
+}
+
+function sparkleAt(ctx: Ctx, x: number, y: number, s: number, col: RGB): void {
+  ctx.fillStyle = rgba(col, 0.95);
+  sparkle(ctx, x, y, s);
+}
+
 /* ------------------------------------------------------------------ finish */
 
 function finish(ctx: Ctx, rng: Rng): void {
@@ -495,8 +1161,8 @@ function finish(ctx: Ctx, rng: Rng): void {
 const cache = new Map<string, CoverResult>();
 
 /** Generates (and memoises) a cover image. Fully deterministic for a given seed and style. */
-export function generateCover(seed: number, requested: CoverStyle): CoverResult {
-  const key = `${seed}|${requested}`;
+export function generateCover(seed: number, requested: CoverStyle, color = "", low = false): CoverResult {
+  const key = `${seed}|${requested}|${color}|${low ? "low" : "full"}`;
   const hit = cache.get(key);
   if (hit) return hit;
   const rng = new Rng(seed ^ 0x1234567);
@@ -506,28 +1172,72 @@ export function generateCover(seed: number, requested: CoverStyle): CoverResult 
   canvas.height = H;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Canvas 2D is not available");
+  const tint = parseTint(color);
+  LOW = low;
   let theme: Theme;
+  try {
   switch (style) {
     case "cosmic":
-      theme = paintCosmic(ctx, rng, seed);
+      theme = paintCosmic(ctx, rng, seed, tint);
       break;
     case "leather":
-      theme = paintLeather(ctx, rng, seed);
+      theme = paintLeather(ctx, rng, seed, tint);
       break;
     case "linen":
-      theme = paintLinen(ctx, rng, seed);
+      theme = paintLinen(ctx, rng, seed, tint);
       break;
     case "marble":
-      theme = paintMarble(ctx, rng, seed);
+      theme = paintMarble(ctx, rng, seed, tint);
+      break;
+    case "plain":
+      theme = paintPlain(ctx, rng, seed, tint);
+      break;
+    case "kraft":
+      theme = paintKraft(ctx, rng, seed, tint);
+      break;
+    case "gradient":
+      theme = paintGradient(ctx, rng, seed, tint);
+      break;
+    case "watercolor":
+      theme = paintWatercolor(ctx, rng, seed, tint);
+      break;
+    case "terrazzo":
+      theme = paintTerrazzo(ctx, rng, seed, tint);
+      break;
+    case "waves":
+      theme = paintWaves(ctx, rng, seed, tint);
+      break;
+    case "storybook":
+      theme = paintStorybook(ctx, rng, seed, tint);
+      break;
+    case "suede":
+      theme = paintSuede(ctx, rng, seed, tint);
+      break;
+    case "canvas":
+      theme = paintCanvas(ctx, rng, seed, tint);
+      break;
+    case "cork":
+      theme = paintCork(ctx, rng, seed, tint);
+      break;
+    case "woodgrain":
+      theme = paintWood(ctx, rng, seed, tint);
+      break;
+    case "denim":
+      theme = paintDenim(ctx, rng, seed, tint);
       break;
     default:
-      theme = paintGeometric(ctx, rng, seed);
+      theme = paintGeometric(ctx, rng, seed, tint);
+  }
+  } finally {
+    LOW = false;
   }
   finish(ctx, rng);
   const result: CoverResult = {
     url: canvas.toDataURL("image/jpeg", 0.88),
     style,
     base: rgba(theme.base),
+    ink: theme.ink ?? "#f4ecd8",
+    lightCover: theme.lightCover ?? false,
     dark: rgba(theme.dark),
     light: rgba(theme.light),
   };

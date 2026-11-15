@@ -52,6 +52,52 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
         await page.screenshot({ path: `${out}/cover-${style}.png` });
       }
     },
+    async features(page) {
+      await page.goto(url("theme=light&mode=handwritten&paper=lined&seps=1&mess=40"));
+      await wait(800);
+      await page.click(".fv-cover-front");
+      await wait(1900);
+      await page.screenshot({ path: `${out}/20-features-open.png` });
+      // pick the first pen, then drag across some words on the left page
+      await page.click(".fv-tray .fv-pen:nth-child(1)");
+      await wait(500);
+      await page.screenshot({ path: `${out}/21-pen-active.png` });
+      const box = await page.evaluate(() => {
+        const ws = Array.from(document.querySelectorAll(".fv-pagebase.fv-left .fv-w")).filter((w) => w.textContent && w.textContent.length > 3);
+        const a = ws[3].getBoundingClientRect();
+        const b = ws[6].getBoundingClientRect();
+        return { x1: a.left + 2, y1: a.top + a.height / 2, x2: b.right - 2, y2: b.top + b.height / 2 };
+      });
+      await page.mouse.move(box.x1, box.y1);
+      await page.mouse.down();
+      await page.mouse.move((box.x1 + box.x2) / 2, box.y2, { steps: 6 });
+      await page.mouse.move(box.x2, box.y2, { steps: 6 });
+      await page.mouse.up();
+      await wait(400);
+      await page.screenshot({ path: `${out}/22-highlighted.png` });
+      console.log("highlights:", await page.evaluate(() => JSON.stringify(window.__settings.highlights)));
+      // jump to the separator via the outline
+      await page.click(".fv-ol-row.is-sep .fv-ol-label");
+      await wait(1500);
+      await page.screenshot({ path: `${out}/23-separator.png` });
+    },
+    async cursive(page) {
+      await page.goto(url("theme=light&mode=handwritten&font=alex-brush&hfont=alex-brush"));
+      await wait(700);
+      await page.click(".fv-cover-front");
+      await wait(1900);
+      await page.screenshot({ path: `${out}/24-cursive.png` });
+    },
+    async newcovers(page) {
+      for (const style of ["plain", "kraft", "gradient", "watercolor", "terrazzo", "waves"]) {
+        await page.goto(url(`theme=light&cover=${style}`));
+        await wait(800);
+        await page.screenshot({ path: `${out}/cover-${style}.png` });
+      }
+      await page.goto(url("theme=dark&cover=leather&color=2e7d5b&label=foil"));
+      await wait(800);
+      await page.screenshot({ path: `${out}/cover-foil.png` });
+    },
     async lined(page) {
       await page.goto(url("theme=light&mode=handwritten&paper=lined&mess=70&font=kalam"));
       await wait(700);

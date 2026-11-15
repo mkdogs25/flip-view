@@ -1,6 +1,7 @@
-import { Component, MarkdownRenderer, Notice, TFile, normalizePath } from "obsidian";
+import { Component, MarkdownRenderer, Notice, TFile, finishRenderMath, normalizePath } from "obsidian";
 import { buildNotebooks } from "./grouping";
-import { HelpModal, NewNotebookModal } from "./modals";
+import { CoverModal, HelpModal, NewNotebookModal, PromptModal } from "./modals";
+import { MathItem, extractMath, restoreMath } from "./render/handmath";
 import type FlipViewPlugin from "./main";
 import { FlipViewSettings, NotebookHost, NoteRef, Notebook } from "./types";
 
@@ -21,21 +22,49 @@ export class ObsidianHost implements NotebookHost {
     return buildNotebooks(this.plugin.app, this.plugin.settings);
   }
 
-  async renderNote(note: NoteRef, el: HTMLElement): Promise<() => void> {
+  async renderNote(note: NoteRef, el: HTMLElement, opts: { hand: boolean }): Promise<() => void> {
     const { app } = this.plugin;
     const file = app.vault.getAbstractFileByPath(note.path);
     if (!(file instanceof TFile)) throw new Error(`Note not found: ${note.path}`);
     let md = (await app.vault.read(file)).replace(FRONTMATTER, "");
     if (this.settings.showNoteTitle && !/^\s*#\s+\S/.test(md)) md = `# ${note.title}\n\n${md}`;
+    let math: MathItem[] = [];
+    if (opts.hand) {
+      const x = extractMath(md);
+      md = x.md;
+      math = x.items;
+    }
     const child = new Component();
     this.owner.addChild(child);
     try {
       await MarkdownRenderer.render(app, md, el, note.path, child);
+      if (opts.hand) restoreMath(el, math);
+      else await finishRenderMath().catch(() => undefined); // flushes the MathJax stylesheet, or equations stay unstyled
     } catch (err) {
       console.error("[flip-view] render failed", err);
       el.createEl("p", { text: "This note could not be rendered." });
     }
     return () => this.owner.removeChild(child);
+  }
+
+  promptText(opts: { title: string; value?: string; hint?: string; placeholder?: string; resetLabel?: string }): Promise<string | null> {
+    return new Promise((resolve) => new PromptModal(this.plugin.app, opts, resolve).open());
+  }
+
+  customiseCover(nb: Notebook): Promise<void> {
+    return new Promise((resolve) => new CoverModal(this.plugin.app, this.plugin.settings, nb, resolve).open());
+  }
+
+  async readNoteText(path: string): Promise<string> {
+    const file = this.plugin.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) throw new Error("Note not found");
+    return this.plugin.app.vault.read(file);
+  }
+
+  async writeNoteText(path: string, text: string): Promise<void> {
+    const file = this.plugin.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) throw new Error("Note not found");
+    await this.plugin.app.vault.modify(file, text);
   }
 
   openNote(path: string, newTab: boolean): void {
@@ -47,6 +76,25 @@ export class ObsidianHost implements NotebookHost {
 
   openLink(href: string, sourcePath: string, newTab: boolean): void {
     void this.plugin.app.workspace.openLinkText(href, sourcePath, newTab ? "split" : "tab");
+  }
+
+  resolveLink(href: string, sourcePath: string): { path: string; heading?: string } | null {
+    const hash = href.indexOf("#");
+    const linkPath = hash >= 0 ? href.slice(0, hash) : href;
+    const sub = hash >= 0 ? href.slice(hash + 1) : "";
+    let path: string | null = sourcePath;
+    if (linkPath) path = this.plugin.app.metadataCache.getFirstLinkpathDest(linkPath, sourcePath)?.path ?? null;
+    if (!path) return null;
+    let heading: string | undefined;
+    if (sub && !sub.startsWith("^")) {
+      const last = sub.split("#").pop() ?? "";
+      try {
+        heading = decodeURIComponent(last);
+      } catch {
+        heading = last;
+      }
+    }
+    return { path, heading };
   }
 
   openExternal(href: string): void {
@@ -88,6 +136,34 @@ export class ObsidianHost implements NotebookHost {
       console.error("[flip-view] could not create notebook", err);
       new Notice("Could not create the notebook. See the console for details.");
     }
+  }
+
+  async createNote(nb: Notebook, title: string): Promise<string | null> {
+    const { app } = this.plugin;
+    const s = this.settings;
+    const name = title.trim().replace(/[\\/:*?"<>|#^[\]]/g, "").trim();
+    if (!name) return null;
+    try {
+      let dir = "";
+      let body = `# ${name}\n\n`;
+      if (nb.id.startsWith("folder:")) dir = nb.id.slice("folder:".length);
+      else body = `---\n${s.propertyName}: ${nb.originalName}\n---\n\n# ${name}\n\n`;
+      let path = normalizePath(dir ? `${dir}/${name}.md` : `${name}.md`);
+      for (let i = 2; app.vault.getAbstractFileByPath(path); i++) path = normalizePath(dir ? `${dir}/${name} ${i}.md` : `${name} ${i}.md`);
+      await app.vault.create(path, body);
+      return path;
+    } catch (err) {
+      console.error("[flip-view] could not create note", err);
+      new Notice("Could not create the note. See the console for details.");
+      return null;
+    }
+  }
+
+  copyText(text: string, what: string): void {
+    void navigator.clipboard.writeText(text).then(
+      () => new Notice(`Copied ${what} to the clipboard.`),
+      () => new Notice("Could not copy to the clipboard."),
+    );
   }
 
   openSettings(): void {
